@@ -1,0 +1,32 @@
+{
+  "name": "timelens-ambient",
+  "version": "0.1.0",
+  "description": "TimeLens Ambient - a glanceable, always-on desktop time-awareness capsule powered by ActivityWatch.",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k -n VITE,ELECTRON -c magenta,cyan \"npm:dev:vite\" \"npm:dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "node scripts/wait-dev-server.mjs && cross-env NODE_ENV=development electron .",
+    "dev:clean": "npx kill-port 5173 5174 5175 5176 5177",
+    "build": "vite build",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "framer-motion": "^11.11.17",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^32.2.5",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
+  }
+}

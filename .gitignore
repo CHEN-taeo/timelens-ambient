@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-electron/
+.dev-server-port
+*.log
+.DS_Store
+.vite/
+.cursor/

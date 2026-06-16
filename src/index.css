@@ -1,0 +1,109 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: fit-content;
+  height: fit-content;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Electron window drag regions */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Tabular numbers so countdowns/stats never jitter */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Thin custom scrollbar inside the expanded board */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+#root.timelens-overlay {
+  width: 100%;
+  height: 100%;
+}
+
+/* line-clamp fallback for activity reason */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes edge-shimmer {
+  0% {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0 10px rgba(124, 58, 237, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35), 0 0 22px rgba(124, 58, 237, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0 10px rgba(124, 58, 237, 0.2);
+  }
+}
+
+.edge-shimmer {
+  animation: edge-shimmer 0.9s ease-in-out;
+}
+
+@keyframes goal-shimmer {
+  0%,
+  100% {
+    background: transparent;
+  }
+  50% {
+    background: rgba(124, 58, 237, 0.08);
+  }
+}
+
+.goal-shimmer {
+  animation: goal-shimmer 0.9s ease-in-out;
+}
+
+/* Meniscus vessel — refractive glass + caustic underglow */
+.meniscus-vessel {
+  backdrop-filter: blur(22px) saturate(165%) brightness(1.07);
+  -webkit-backdrop-filter: blur(22px) saturate(165%) brightness(1.07);
+  isolation: isolate;
+}
+
+.meniscus-surface-text {
+  mix-blend-mode: soft-light;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.12);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+@layer components {
+  .field-input {
+    @apply w-full rounded-lg border border-white/[0.08] bg-black/40 px-2 py-1 text-[11px] text-txt-primary outline-none placeholder:text-txt-muted focus:border-accent/50;
+  }
+}
