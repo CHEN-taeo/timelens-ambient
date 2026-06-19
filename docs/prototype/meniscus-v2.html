@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TimeLens · Meniscus v2 — 设计原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --canvas: #07080C;
+    --glass: rgba(13, 13, 20, 0.82);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-soft: rgba(255, 255, 255, 0.05);
+    --accent: #7C3AED;
+    --accent-bright: #A78BFA;
+    --txt-primary: #F1F0FF;
+    --txt-secondary: #A0A0B8;
+    --txt-muted: #50506A;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background:
+      radial-gradient(1200px 700px at 50% -10%, #0d0e16 0%, var(--canvas) 60%),
+      var(--canvas);
+    color: var(--txt-primary);
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px 80px;
+    overflow-x: hidden;
+  }
+
+  .tnum { font-variant-numeric: tabular-nums; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  header { text-align: center; margin-bottom: 8px; }
+  header h1 { font-size: 17px; font-weight: 500; letter-spacing: 0.5px; }
+  header h1 .dot { color: var(--accent-bright); }
+  header p { font-size: 12px; color: var(--txt-muted); margin-top: 6px; letter-spacing: 0.3px; }
+
+  .layout {
+    display: flex;
+    gap: 28px;
+    align-items: flex-start;
+    margin-top: 32px;
+    max-width: 1080px;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* ---- Stage ---- */
+  .stage-wrap { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+
+  .stage {
+    position: relative;
+    width: 720px;
+    max-width: 92vw;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(0,0,0,0.2));
+    border: 1px solid var(--border-soft);
+    padding: 36px 0 28px;
+    overflow: hidden;
+  }
+  .stage::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(600px 300px at 50% 30%, rgba(124,58,237,0.06), transparent 70%);
+    pointer-events: none;
+  }
+
+  svg { display: block; margin: 0 auto; }
+
+  /* Peek text — floats above liquid surface */
+  .peek {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 184px;
+    font-size: 13px;
+    letter-spacing: 0.4px;
+    color: var(--txt-primary);
+    mix-blend-mode: soft-light;
+    opacity: 0;
+    transition: opacity 0.45s cubic-bezier(0.22,1,0.36,1), filter 0.45s, transform 0.45s;
+    filter: blur(4px);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .peek.show { opacity: 1; filter: blur(0); transform: translateX(-50%) translateY(-4px); }
+
+  .farewell {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 150px;
+    width: 80%;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--txt-secondary);
+    opacity: 0;
+    transition: opacity 1.4s ease;
+    pointer-events: none;
+  }
+  .farewell.show { opacity: 1; }
+  .farewell b { color: var(--txt-primary); font-weight: 500; }
+
+  .state-tag {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--txt-muted);
+  }
+  .state-tag span { color: var(--accent-bright); }
+
+  /* ---- Controls ---- */
+  .panel {
+    width: 320px;
+    background: var(--glass);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .panel h2 {
+    font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--txt-muted); font-weight: 600;
+  }
+  .group { display: flex; flex-direction: column; gap: 9px; }
+  .group > label { font-size: 11px; color: var(--txt-secondary); display: flex; justify-content: space-between; }
+  .group > label .val { color: var(--txt-primary); }
+
+  .cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .cat {
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+    border-radius: 10px;
+    padding: 7px 2px 6px;
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .cat:hover { background: rgba(255,255,255,0.05); }
+  .cat.active { border-color: rgba(255,255,255,0.28); background: rgba(255,255,255,0.06); }
+  .cat .swatch { width: 12px; height: 12px; border-radius: 50%; }
+  .cat .nm { font-size: 8px; color: var(--txt-secondary); letter-spacing: 0.2px; }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,0.12); outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--accent-bright);
+    box-shadow: 0 0 8px rgba(167,139,250,0.5);
+    cursor: pointer;
+  }
+
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  button.act {
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    color: var(--txt-secondary);
+    border-radius: 10px;
+    padding: 9px 6px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  button.act:hover { border-color: var(--accent); color: var(--txt-primary); background: rgba(124,58,237,0.12); }
+  button.act.full { grid-column: span 2; }
+
+  .toggle { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--txt-secondary); }
+  .switch { position: relative; width: 36px; height: 20px; border-radius: 999px; background: rgba(255,255,255,0.1); cursor: pointer; transition: background 0.2s; }
+  .switch.on { background: rgba(124,58,237,0.6); }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+  .switch.on::after { transform: translateX(16px); }
+
+  .legend {
+    max-width: 720px; width: 92vw;
+    margin-top: 28px;
+    font-size: 11.5px; line-height: 1.85; color: var(--txt-muted);
+    border-top: 1px solid var(--border-soft);
+    padding-top: 18px;
+  }
+  .legend b { color: var(--txt-secondary); font-weight: 500; }
+  .legend .k { color: var(--accent-bright); }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="dot">●</span> TimeLens · Meniscus v2</h1>
+    <p>设计原型 — 张力即专注 · 粘度即行为 · 顶线即潮汐 · 蒸发即告别</p>
+  </header>
+
+  <div class="layout">
+    <div class="stage-wrap">
+      <div class="stage" id="stage">
+        <svg id="svg" width="720" height="320" viewBox="0 0 720 320" aria-hidden="true"></svg>
+        <div class="peek" id="peek"></div>
+        <div class="farewell" id="farewell"></div>
+      </div>
+      <div class="state-tag">状态 · <span id="stateName">AMBIENT</span> &nbsp;|&nbsp; 悬停胶囊看 Peek · 试试右侧按钮</div>
+    </div>
+
+    <div class="panel">
+      <h2>感知 · 当前类别</h2>
+      <div class="cats" id="cats"></div>
+
+      <div class="group">
+        <label>专注稳定度 <span class="val" id="steadyVal">玻璃般静</span></label>
+        <input type="range" id="steady" min="0" max="100" value="82" />
+      </div>
+
+      <div class="group">
+        <label>今日时间（潮汐预期）<span class="val tnum" id="timeVal">14:00</span></label>
+        <input type="range" id="time" min="0" max="100" value="55" />
+      </div>
+
+      <div class="group">
+        <label>实际积累（液位）<span class="val tnum" id="fillVal">52%</span></label>
+        <input type="range" id="fill" min="2" max="98" value="60" />
+      </div>
+
+      <h2>镜子 · 峰与终</h2>
+      <div class="btns">
+        <button class="act" id="btnSeen">被看见 · 呼吸</button>
+        <button class="act" id="btnCrystal">完成番茄 · 结晶</button>
+        <button class="act full" id="btnSettle">日结 · 蒸发告别</button>
+        <button class="act full" id="btnReset">重置</button>
+      </div>
+
+      <div class="toggle">
+        <span>心流保护（窗体淡至 22%·静默）</span>
+        <div class="switch" id="flowSwitch"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('svg');
+
+const CATS = {
+  coding:        { hue: '#818CF8', label: '编程开发', app: 'Cursor', amp: 1.8, freq: 0.55, deep: true },
+  project:       { hue: '#6EE7B7', label: '项目开发', app: 'idea-forge', amp: 1.7, freq: 0.5, deep: true },
+  learning:      { hue: '#FCD34D', label: '学习资料', app: 'Obsidian', amp: 2.2, freq: 0.7, deep: true },
+  ai:            { hue: '#67E8F9', label: 'AI 工具',  app: 'claude.ai', amp: 2.0, freq: 0.62, deep: true },
+  comms:         { hue: '#F9A8D4', label: '沟通协作', app: 'Slack', amp: 3.6, freq: 1.05, deep: false },
+  entertainment: { hue: '#FCA5A5', label: '娱乐摸鱼', app: 'bilibili', amp: 7.0, freq: 1.7, deep: false },
+  idle:          { hue: '#505068', label: '空闲',     app: '—', amp: 0.5, freq: 0.3, deep: false },
+};
+
+// Pill geometry (scaled up for visibility; real app is 168x36)
+const PILL = { x: 150, y: 92, w: 420, h: 136, r: 68 };
+const WALL = 7;
+const INNER = {
+  x: PILL.x + WALL,
+  top: PILL.y + WALL,
+  w: PILL.w - WALL * 2,
+  h: PILL.h - WALL * 2,
+  bottom: PILL.y + PILL.h - WALL,
+};
+
+const state = {
+  cat: 'coding',
+  steady: 0.82,
+  timeP: 0.55,
+  fillP: 0.60,
+  flow: false,
+  phase: 0,
+  // one-shot envelopes
+  breath: 0,        // seen breath 0..1 active
+  breathT: 0,
+  crystal: 0,       // crystallization progress 0..1
+  crystalActive: false,
+  settle: 'none',   // none | evaporating | ended
+  settleT: 0,
+  evapFill: 0,      // captured fill at settle start
+  particles: [],
+  ended: false,
+};
+
+/* ---------- color helpers ---------- */
+function hexToRgb(h) {
+  const n = parseInt(h.slice(1), 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function lerp(a, b, t) { return a + (b - a) * t; }
+function mix(c1, c2, t) {
+  const a = hexToRgb(c1), b = hexToRgb(c2);
+  return `rgb(${Math.round(lerp(a.r,b.r,t))},${Math.round(lerp(a.g,b.g,t))},${Math.round(lerp(a.b,b.b,t))})`;
+}
+// Dead-reckoning hue from day progress
+function reckonColor(p) {
+  const stops = [
+    [0.00, '#4A7CFF'], [0.30, '#90A8FF'], [0.55, '#F0A030'],
+    [0.78, '#C07018'], [1.00, '#30B060'],
+  ];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [p0, c0] = stops[i], [p1, c1] = stops[i + 1];
+    if (p <= p1) return mix(c0, c1, (p - p0) / (p1 - p0));
+  }
+  return stops[stops.length - 1][1];
+}
+
+/* ---------- SVG scaffold ---------- */
+svg.innerHTML = `
+  <defs>
+    <clipPath id="vesselClip">
+      <rect x="${PILL.x}" y="${PILL.y}" width="${PILL.w}" height="${PILL.h}" rx="${PILL.r}" ry="${PILL.r}" />
+    </clipPath>
+    <linearGradient id="liquidGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop id="lg0" offset="0" />
+      <stop id="lg1" offset="0.55" />
+      <stop id="lg2" offset="1" />
+    </linearGradient>
+    <radialGradient id="beadGrad" cx="36%" cy="30%" r="68%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.8" />
+      <stop id="beadOuter" offset="100%" stop-opacity="0.2" />
+    </radialGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" />
+    </filter>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b" />
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <g id="capsule">
+    <rect id="vesselGlass" x="${PILL.x}" y="${PILL.y}" width="${PILL.w}" height="${PILL.h}" rx="${PILL.r}" ry="${PILL.r}"
+          fill="rgba(13,13,20,0.55)" stroke="rgba(255,255,255,0.09)" stroke-width="1" />
+    <g clip-path="url(#vesselClip)">
+      <ellipse id="caustic" filter="url(#soft)" opacity="0.55" />
+      <path id="liquidBody" />
+      <path id="liquidDeep" opacity="0.5" />
+      <path id="specular" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.4" />
+      <g id="particles"></g>
+    </g>
+    <line id="floorLine" x1="${INNER.x}" x2="${INNER.x + INNER.w}" stroke-width="1" />
+    <line id="tideLine" x1="${INNER.x + 6}" x2="${INNER.x + INNER.w - 6}" stroke-dasharray="2 6" stroke-width="1" opacity="0.5" />
+    <line id="horizon" x1="${PILL.x + 14}" x2="${PILL.x + PILL.w - 14}" y1="${PILL.y + 2}" y2="${PILL.y + 2}" stroke-width="1.5" />
+    <circle id="bead" r="6" fill="url(#beadGrad)" />
+    <polygon id="crystal" opacity="0" />
+  </g>
+`;
+
+const el = (id) => document.getElementById(id);
+const bead = el('bead'), crystal = el('crystal');
+
+/* ---------- surface math ---------- */
+function gauss(x, mu, sigma) { const d = (x - mu) / sigma; return Math.exp(-d * d); }
+
+function surfaceY(xRel, baseY, amp, freq, edgeLift) {
+  // xRel in [0,1]
+  const x = xRel * INNER.w;
+  const lift = edgeLift * (gauss(x, 0, INNER.w * 0.14) + gauss(x, INNER.w, INNER.w * 0.14));
+  const wave = amp * Math.sin(xRel * Math.PI * 2 * (1 + freq) + state.phase * freq * 3);
+  const micro = amp * 0.4 * Math.sin(xRel * Math.PI * 7 + state.phase * 2.1);
+  return baseY - lift - wave - micro;
+}
+
+function buildLiquid() {
+  const c = CATS[state.cat];
+  const instab = 1 - state.steady;
+
+  // effective fill (settle overrides)
+  let fillP = state.fillP;
+  if (state.settle === 'evaporating') fillP = state.evapFill * (1 - state.settleT);
+  if (state.settle === 'ended') fillP = 0;
+
+  // breath envelope nudges fill + smooths
+  const breathPulse = state.breath > 0 ? Math.sin(state.breath * Math.PI) : 0;
+  fillP = Math.min(0.98, fillP + breathPulse * 0.05);
+
+  const baseY = INNER.bottom - fillP * INNER.h;
+
+  // amplitude: viscosity (category) × instability × flow stillness
+  let amp = c.amp * (0.3 + instab * 1.5);
+  if (c.deep && state.steady > 0.7) amp *= 0.5;       // deep work → glassy
+  if (state.flow) amp *= 0.15;                          // flow holds its breath
+  amp *= (1 - breathPulse * 0.6);                       // breath smooths surface
+  const edgeLift = 6 + amp * 0.8;
+  const freq = c.freq;
+
+  const N = 60;
+  let top = '';
+  for (let i = 0; i <= N; i++) {
+    const xr = i / N;
+    const x = INNER.x + xr * INNER.w;
+    const y = surfaceY(xr, baseY, amp, freq, edgeLift);
+    top += (i === 0 ? `M ${x},${y}` : ` L ${x},${y}`);
+  }
+  const body = `${top} L ${INNER.x + INNER.w},${INNER.bottom + 40} L ${INNER.x},${INNER.bottom + 40} Z`;
+  el('liquidBody').setAttribute('d', body);
+  el('liquidDeep').setAttribute('d', body);
+  el('specular').setAttribute('d', top);
+
+  // gradients
+  const hue = c.hue;
+  const quiet = (state.cat === 'idle') ? 0.5 : 1;
+  el('lg0').setAttribute('stop-color', hue);
+  el('lg0').setAttribute('stop-opacity', (state.flow ? 0.18 : 0.42) * quiet);
+  el('lg1').setAttribute('stop-color', hue);
+  el('lg1').setAttribute('stop-opacity', (state.flow ? 0.26 : 0.5) * quiet);
+  el('lg2').setAttribute('stop-color', hue);
+  el('lg2').setAttribute('stop-opacity', (state.flow ? 0.34 : 0.62) * quiet);
+  el('liquidBody').setAttribute('fill', 'url(#liquidGrad)');
+  el('liquidDeep').setAttribute('fill', 'url(#liquidGrad)');
+  el('beadOuter').setAttribute('stop-color', hue);
+
+  // caustic light pool
+  const caustic = el('caustic');
+  caustic.setAttribute('cx', INNER.x + INNER.w * 0.72);
+  caustic.setAttribute('cy', baseY + 14);
+  caustic.setAttribute('rx', Math.max(20, INNER.w * 0.22));
+  caustic.setAttribute('ry', 5);
+  caustic.setAttribute('fill', hue);
+
+  // floor + tide + horizon
+  el('floorLine').setAttribute('y1', INNER.bottom);
+  el('floorLine').setAttribute('y2', INNER.bottom);
+  el('floorLine').setAttribute('stroke', `rgba(${hexToRgb(hue).r},${hexToRgb(hue).g},${hexToRgb(hue).b},0.18)`);
+
+  const tideY = INNER.bottom - state.timeP * INNER.h;
+  el('tideLine').setAttribute('y1', tideY);
+  el('tideLine').setAttribute('y2', tideY);
+  el('tideLine').setAttribute('stroke', 'rgba(255,255,255,0.4)');
+
+  const rc = reckonColor(state.timeP);
+  el('horizon').setAttribute('stroke', rc);
+  el('horizon').setAttribute('filter', 'url(#glow)');
+
+  // bead — rides surface near right, jitter from instability
+  const beadXr = 0.72;
+  const bx = INNER.x + beadXr * INNER.w;
+  let by = surfaceY(beadXr, baseY, amp, freq, edgeLift);
+  const jitter = instab * (state.flow ? 0 : 3.2);
+  const jx = Math.sin(state.phase * 9.3) * jitter;
+  const jy = Math.cos(state.phase * 11.1) * jitter * 0.6;
+
+  bead.setAttribute('cx', bx + jx);
+  bead.setAttribute('cy', by + jy);
+  bead.setAttribute('r', state.crystalActive ? 6 * (1 - state.crystal) : 6);
+  bead.setAttribute('filter', 'url(#glow)');
+  bead.style.filter = '';
+  bead.setAttribute('opacity', state.ended ? 0.85 : 1);
+
+  // crystallization: faceted diamond at bead
+  if (state.crystalActive || state.settle === 'ended') {
+    const cx = state.settle === 'ended' ? INNER.x + INNER.w * 0.82 : bx + jx;
+    const cyy = state.settle === 'ended' ? (INNER.bottom - 0.04 * INNER.h) : by + jy;
+    const prog = state.settle === 'ended' ? 1 : Math.sin(state.crystal * Math.PI);
+    const s = 5 + prog * 6;
+    crystal.setAttribute('points',
+      `${cx},${cyy - s} ${cx + s * 0.7},${cyy} ${cx},${cyy + s} ${cx - s * 0.7},${cyy}`);
+    crystal.setAttribute('fill', state.settle === 'ended' ? rc : '#ffffff');
+    crystal.setAttribute('opacity', state.settle === 'ended' ? 0.9 : prog);
+    crystal.setAttribute('filter', 'url(#glow)');
+  } else {
+    crystal.setAttribute('opacity', 0);
+  }
+
+  // bead breathing when ended
+  if (state.ended) {
+    const b = 0.6 + 0.4 * Math.sin(state.phase * 0.8);
+    bead.setAttribute('opacity', b);
+  }
+}
+
+/* ---------- particles (evaporation) ---------- */
+function spawnParticle() {
+  const hue = CATS[state.cat].hue;
+  state.particles.push({
+    x: INNER.x + Math.random() * INNER.w,
+    y: INNER.bottom - state.evapFill * (1 - state.settleT) * INNER.h,
+    vy: 0.4 + Math.random() * 0.8,
+    life: 1,
+    r: 1 + Math.random() * 2,
+    hue,
+  });
+}
+function renderParticles() {
+  const g = el('particles');
+  g.innerHTML = state.particles.map(p =>
+    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.r.toFixed(1)}" fill="${p.hue}" opacity="${(p.life*0.5).toFixed(2)}"/>`
+  ).join('');
+}
+
+/* ---------- loop ---------- */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  state.phase += dt;
+
+  if (state.breath > 0) { state.breath += dt / 2.4; if (state.breath >= 1) state.breath = 0; }
+  if (state.crystalActive) { state.crystal += dt / 1.6; if (state.crystal >= 1) { state.crystalActive = false; state.crystal = 0; } }
+
+  if (state.settle === 'evaporating') {
+    state.settleT += dt / 4.2;
+    if (Math.random() < 0.6) spawnParticle();
+    state.particles.forEach(p => { p.y -= p.vy; p.life -= dt * 0.5; });
+    state.particles = state.particles.filter(p => p.life > 0);
+    if (state.settleT >= 1) {
+      state.settle = 'ended';
+      state.ended = true;
+      el('farewell').classList.add('show');
+      el('stateName').textContent = 'SETTLE · 已抵达';
+    }
+  }
+  if (state.settle === 'ended') {
+    state.particles.forEach(p => { p.y -= p.vy; p.life -= dt * 0.5; });
+    state.particles = state.particles.filter(p => p.life > 0);
+  }
+
+  buildLiquid();
+  renderParticles();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------- controls ---------- */
+const catsEl = el('cats');
+Object.entries(CATS).filter(([k]) => k !== 'project' && k !== 'idle' || true).forEach(([key, c]) => {
+  const d = document.createElement('div');
+  d.className = 'cat' + (key === state.cat ? ' active' : '');
+  d.dataset.key = key;
+  d.innerHTML = `<span class="swatch" style="background:${c.hue}"></span><span class="nm">${c.label}</span>`;
+  d.onclick = () => {
+    state.cat = key;
+    document.querySelectorAll('.cat').forEach(x => x.classList.remove('active'));
+    d.classList.add('active');
+  };
+  catsEl.appendChild(d);
+});
+
+const steady = el('steady'), steadyVal = el('steadyVal');
+steady.oninput = () => {
+  state.steady = steady.value / 100;
+  steadyVal.textContent = state.steady > 0.75 ? '玻璃般静' : state.steady > 0.45 ? '微澜' : '频繁切换';
+};
+
+const timeR = el('time'), timeVal = el('timeVal');
+timeR.oninput = () => {
+  state.timeP = timeR.value / 100;
+  const mins = 9 * 60 + state.timeP * (18 - 9) * 60;
+  const h = Math.floor(mins / 60), m = Math.round((mins % 60) / 1);
+  timeVal.textContent = `${String(h).padStart(2,'0')}:${String(Math.floor(mins%60)).padStart(2,'0')}`;
+};
+
+const fillR = el('fill'), fillVal = el('fillVal');
+fillR.oninput = () => { state.fillP = fillR.value / 100; fillVal.textContent = `${fillR.value}%`; };
+
+el('btnSeen').onclick = () => { if (state.flow) return; state.breath = 0.001; el('stateName').textContent = '被看见 · 呼吸'; setTimeout(() => el('stateName').textContent = 'AMBIENT', 2400); };
+el('btnCrystal').onclick = () => { state.crystalActive = true; state.crystal = 0.001; el('stateName').textContent = '+1 🍅 · 完整'; setTimeout(() => el('stateName').textContent = 'AMBIENT', 1800); };
+
+el('btnSettle').onclick = () => {
+  state.settle = 'evaporating';
+  state.settleT = 0;
+  state.evapFill = state.fillP;
+  state.particles = [];
+  el('stateName').textContent = 'SETTLE · 蒸发中';
+  const prod = (state.fillP * 5).toFixed(1);
+  const mainPct = Math.round(state.timeP * 100);
+  el('farewell').innerHTML = `今天主线 <b>${mainPct}%</b>，专注 <b>${prod}h</b>，比昨天多 <b>42min</b>。<br/>晚安。`;
+};
+
+el('btnReset').onclick = () => {
+  state.settle = 'none'; state.ended = false; state.settleT = 0; state.particles = [];
+  state.breath = 0; state.crystalActive = false; state.crystal = 0;
+  el('farewell').classList.remove('show');
+  el('stateName').textContent = 'AMBIENT';
+};
+
+const flowSwitch = el('flowSwitch');
+flowSwitch.onclick = () => {
+  state.flow = !state.flow;
+  flowSwitch.classList.toggle('on', state.flow);
+  el('stateName').textContent = state.flow ? 'FLOW · 屏息' : 'AMBIENT';
+};
+
+/* ---------- peek on hover ---------- */
+const stage = el('stage'), peek = el('peek');
+let peekT1, peekT2;
+stage.addEventListener('mousemove', (e) => {
+  const r = stage.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const overPill = x > PILL.x && x < PILL.x + PILL.w && y > PILL.y - 10 && y < PILL.y + PILL.h + 10;
+  if (overPill && !peekT1 && !state.flow && state.settle === 'none') {
+    peekT1 = setTimeout(() => {
+      const c = CATS[state.cat];
+      const mins = Math.round(state.fillP * 300);
+      peek.textContent = `${c.label} · ${Math.floor(mins/60)}h${mins%60}m`;
+      peek.classList.add('show');
+      peekT2 = setTimeout(() => { peek.textContent = `${c.label} · ${c.app} · ${Math.round(state.fillP*100)}min`; }, 800);
+    }, 400);
+  }
+});
+stage.addEventListener('mouseleave', () => {
+  clearTimeout(peekT1); clearTimeout(peekT2); peekT1 = peekT2 = null;
+  peek.classList.remove('show');
+});
+
+/* ---------- legend ---------- */
+el('legend').innerHTML = `
+  <b>你正在看什么 ——</b><br/>
+  <span class="k">液色</span> = 当前类别（感知层）。 <span class="k">弯月面静/动</span> = 专注稳定度：深度工作高稳定时液面玻璃般静，频繁切换则微澜、● 颤动 —— 你先“感觉到”散乱，才读到数字。<br/>
+  <span class="k">粘度</span> = 行为签名：编程/学习像蜂蜜（稠、慢），娱乐摸鱼像水（薄、晃）—— 物理即判断，文案不必开口。<br/>
+  <span class="k">顶线</span> = dead reckoning 一日航程色； <span class="k">虚线潮汐</span> = 今日预期液位。实际液面在潮汐线上方 = 走在前面，下方 = 落后 —— 空间感受，无百分比。<br/>
+  <span class="k">被看见 · 呼吸</span> = 当天首次被准确识别时，液面缓慢呼吸一次，不弹 toast。 <span class="k">结晶</span> = 番茄完成，● 短暂结晶再溶回。 <span class="k">蒸发告别</span> = 日结时液体蒸发、留一颗水晶在顶线，告别后 ● 慢呼吸、停止刷新。<br/>
+  <span class="k">心流保护</span> = 拒绝打扰：悬停不出文字、不响地标、暂缓偏航 —— 由“拒绝做什么”定义的功能。
+`;
+</script>
+</body>
+</html>

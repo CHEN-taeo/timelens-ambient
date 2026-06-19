@@ -3,6 +3,7 @@
 // have `cors_origins = "*"` set so the renderer can fetch it.
 
 import { categorizeDetailed, categorize } from '../utils/rules.js'
+import { sessionsFromEvents } from '../utils/sessionUtils.js'
 
 const AW_BASE = 'http://localhost:5600/api/0'
 
@@ -69,6 +70,16 @@ export async function getTodayTotals() {
   }
 
   return { totalsByCategory, productiveSeconds, totalSeconds }
+}
+
+export async function getTodaySessions() {
+  const { windowBucket } = await resolveBuckets()
+  const start = startOfToday().toISOString()
+  const end = new Date().toISOString()
+  const events = await getJSON(
+    `${AW_BASE}/buckets/${windowBucket}/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&limit=100000`
+  )
+  return sessionsFromEvents(events)
 }
 
 // Hourly active seconds for the last 24h, as a simple 24-slot array, each slot

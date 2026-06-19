@@ -41,6 +41,8 @@ function normalize(raw) {
   s.mainlineDate = String(s.mainlineDate || '')
   const modes = ['lens-ring', 'meniscus', 'minimal', 'standard', 'horizon']
   s.presentationMode = modes.includes(s.presentationMode) ? s.presentationMode : 'meniscus'
+  // 旧版「极简呼吸点」已并入横露珠 dock
+  if (s.presentationMode === 'minimal') s.presentationMode = 'meniscus'
   return s
 }
 

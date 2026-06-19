@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TimeLens · Dewdrop — Liquid Glass 重设计</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{--canvas:#06070B;--glass:rgba(15,15,24,0.7);--border:rgba(255,255,255,0.1);
+    --accent:#7C3AED;--accent-bright:#A78BFA;--txt:#F4F3FF;--txt2:#A6A6BE;--muted:#55556E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--canvas);color:var(--txt);font-family:'Inter',system-ui,sans-serif;
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:34px 20px 70px;overflow-x:hidden}
+  .tnum{font-variant-numeric:tabular-nums}
+  header{text-align:center;margin-bottom:4px}
+  header h1{font-size:17px;font-weight:500;letter-spacing:.5px}
+  header h1 .o{color:var(--accent-bright)}
+  header p{font-size:12px;color:var(--muted);margin-top:6px}
+
+  .stage{position:relative;width:760px;max-width:94vw;height:420px;border-radius:26px;margin-top:24px;
+    background:
+      radial-gradient(420px 280px at 28% 38%, rgba(124,58,237,.16), transparent 62%),
+      radial-gradient(380px 300px at 70% 64%, rgba(56,120,255,.14), transparent 60%),
+      radial-gradient(300px 240px at 60% 26%, rgba(103,232,249,.08), transparent 60%),
+      linear-gradient(180deg,#0a0b12,#06070b);
+    border:1px solid rgba(255,255,255,.06);overflow:hidden}
+  svg{display:block;position:relative;z-index:2}
+
+  .peek{position:absolute;z-index:3;left:402px;top:196px;height:40px;display:flex;align-items:center;
+    padding:0 18px 0 16px;border-radius:0 20px 20px 0;
+    background:linear-gradient(90deg,rgba(20,20,32,0),rgba(20,20,32,.62) 26%);
+    backdrop-filter:blur(14px);font-size:14px;letter-spacing:.4px;color:var(--txt);white-space:nowrap;
+    opacity:0;transform:translateX(-14px);transition:opacity .42s cubic-bezier(.22,1,.36,1),transform .42s;pointer-events:none}
+  .peek.show{opacity:1;transform:translateX(0)}
+  .peek .sub{color:var(--txt2);margin-left:9px;font-size:12px}
+
+  .card{position:absolute;z-index:4;left:300px;top:120px;width:344px;height:240px;border-radius:26px;
+    background:linear-gradient(180deg,rgba(22,22,34,.78),rgba(13,13,22,.82));
+    border:1px solid var(--border);backdrop-filter:blur(26px) saturate(180%);
+    box-shadow:0 24px 60px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.12),0 0 0 1px rgba(255,255,255,.04);
+    opacity:0;transform:scale(.16);transform-origin:6px 90px;
+    transition:opacity .44s cubic-bezier(.22,1,.36,1),transform .5s cubic-bezier(.34,1.45,.5,1);
+    pointer-events:none;overflow:hidden;visibility:hidden}
+  .card.open{opacity:1;transform:scale(1);pointer-events:auto;visibility:visible}
+  .card .top{height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .card .top .t{font-size:11px;color:var(--txt2);letter-spacing:.3px}
+  .card .top .x{font-size:13px;color:var(--muted);cursor:pointer}
+  .grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:9px;padding:11px;height:calc(100% - 32px)}
+  .q{border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);border-radius:14px;padding:10px 11px;display:flex;flex-direction:column;gap:3px}
+  .q .lab{font-size:8px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted)}
+  .q .big{font-size:13px;color:var(--txt);font-weight:500}
+  .q .sm{font-size:10px;color:var(--txt2)}
+  .q .bc{font-size:9px;color:var(--accent-bright);opacity:.85;cursor:pointer}
+
+  .mini{position:absolute;z-index:3;left:34px;top:30px;font-size:10px;color:var(--muted);pointer-events:none}
+  .dew-hit{position:absolute;z-index:5;left:200px;top:72px;width:200px;height:232px;border:none;padding:0;margin:0;
+    background:transparent;cursor:pointer;border-radius:50% 50% 46% 46% / 58% 58% 42% 42%}
+  .dew-hit:focus-visible{outline:2px solid rgba(167,139,250,.55);outline-offset:4px}
+
+  .tag{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-top:14px;text-align:center}
+  .tag span{color:var(--accent-bright)}
+
+  .bar{display:flex;align-items:center;gap:16px;margin-top:18px;padding:12px 16px;border-radius:16px;
+    background:var(--glass);border:1px solid var(--border);backdrop-filter:blur(18px);flex-wrap:wrap;justify-content:center;max-width:760px}
+  .cats{display:flex;gap:6px}
+  .cat{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.18s;position:relative}
+  .cat.active{border-color:rgba(255,255,255,.85);transform:scale(1.12)}
+  .slid{display:flex;flex-direction:column;gap:5px;min-width:130px}
+  .slid label{font-size:10px;color:var(--txt2);display:flex;justify-content:space-between}
+  .slid label .v{color:var(--txt)}
+  input[type=range]{-webkit-appearance:none;width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,.14);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent-bright);box-shadow:0 0 8px rgba(167,139,250,.5);cursor:pointer}
+  .b{border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--txt2);border-radius:10px;padding:8px 11px;font-size:11px;font-family:inherit;cursor:pointer;transition:.18s}
+  .b:hover{border-color:var(--accent);color:var(--txt);background:rgba(124,58,237,.12)}
+  .switch{position:relative;width:34px;height:19px;border-radius:999px;background:rgba(255,255,255,.12);cursor:pointer;transition:.2s;flex-shrink:0}
+  .switch.on{background:rgba(124,58,237,.6)}
+  .switch::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;transition:transform .2s}
+  .switch.on::after{transform:translateX(15px)}
+  .flow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt2)}
+  .legend{max-width:760px;width:94vw;margin-top:22px;font-size:11.5px;line-height:1.85;color:var(--muted);border-top:1px solid rgba(255,255,255,.05);padding-top:16px}
+  .legend .k{color:var(--accent-bright)}
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="o">💧</span> TimeLens · Dewdrop</h1>
+    <p>水滴 × Apple Liquid Glass — 一颗盛着你一天的露珠 · 折射 · 高光 · 表面张力</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="svg" width="760" height="420" viewBox="0 0 760 420"></svg>
+    <div class="mini" id="mini">↖ 真实尺寸 (~40px)</div>
+    <button type="button" class="dew-hit" id="dewHit" aria-label="点击露珠展开"></button>
+    <div class="peek" id="peek"></div>
+    <div class="card" id="card">
+      <div class="top"><span class="t">现在 · 航程 · 番茄 · 主线</span><span class="x" id="cardX">✕</span></div>
+      <div class="grid">
+        <div class="q"><span class="lab">现在</span><span class="big" id="qNow">Cursor</span><span class="sm" id="qDur">已 33min</span><span class="bc" id="qBc">因为：cursor.exe ↺</span></div>
+        <div class="q"><span class="lab">航程</span><span class="big" id="qVoy">14:00 · 过半</span><span class="sm">比昨天此刻多 18min</span></div>
+        <div class="q"><span class="lab">番茄</span><span class="big">18:42</span><span class="sm" id="qPomo">React 组件 · 稳</span></div>
+        <div class="q"><span class="lab">主线</span><span class="big">Dewdrop 重设计</span><span class="sm">推进 ████░░ 62%</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="tag">状态 · <span id="stateName">AMBIENT</span> &nbsp;|&nbsp; 悬停露珠看窥视 · 点击露珠绽放</div>
+
+  <div class="bar">
+    <div class="cats" id="cats"></div>
+    <div class="slid"><label>今日时间 <span class="v tnum" id="timeVal">14:00</span></label><input type="range" id="time" min="0" max="100" value="55"/></div>
+    <div class="slid"><label>积累(液位) <span class="v tnum" id="fillVal">55%</span></label><input type="range" id="fill" min="6" max="94" value="55"/></div>
+    <div class="slid"><label>稳定度 <span class="v" id="stVal">稳</span></label><input type="range" id="steady" min="0" max="100" value="82"/></div>
+    <button class="b" id="bSeen">呼吸</button>
+    <button class="b" id="bCry">结晶</button>
+    <button class="b" id="bSet">告别</button>
+    <button class="b" id="bRst">重置</button>
+    <div class="flow">心流<div class="switch" id="flowSw"></div></div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <script src="lens-drop.js"></script>
+</body>
+</html>

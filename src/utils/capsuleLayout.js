@@ -1,14 +1,22 @@
-/** Tight compact width — no dead space in the ambient pill. */
+/** 横露珠 + Focus 舞台尺寸 — 与 docs/prototype/lens-dew-bar.html 一致 */
 
-const CHAR_PX = 6.5
-
-/** Meniscus vessel — fixed Electron window; inner liquid width animates on hover. */
+export const MENISCUS_DEW_W = 168
 export const MENISCUS_W = 168
 export const MENISCUS_MINIMAL_W = 32
-export const MENISCUS_LIQUID_AMBIENT = 92
-export const MENISCUS_LIQUID_HOVER = 108
-export const MENISCUS_LIQUID_PEEK = 122
-export const MENISCUS_LIQUID_PEEK_PLUS = 136
+/** 露珠 168 + 左侧拖动条 6 */
+export const MENISCUS_SHELL_W = MENISCUS_DEW_W + 6
+
+export const DOCK_H = 36
+export const FOCUS_STAGE_W = 640
+export const FOCUS_VESSEL_H = 420
+export const FOCUS_PILLARS_H = 92
+export const FOCUS_STAGE_H = FOCUS_VESSEL_H + FOCUS_PILLARS_H
+
+export const EXPANDED_W = FOCUS_STAGE_W
+export const EXPANDED_H = DOCK_H + FOCUS_STAGE_H
+export const PILL_H = DOCK_H
+
+const CHAR_PX = 6.5
 
 export function computeCompactWidth({
   presentationMode = 'meniscus',
@@ -22,7 +30,6 @@ export function computeCompactWidth({
   signatureState = 'ambient',
 }) {
   if (presentationMode === 'meniscus') {
-    if (signatureState === 'minimal') return MENISCUS_MINIMAL_W
     return MENISCUS_W
   }
 
@@ -33,11 +40,10 @@ export function computeCompactWidth({
   const timePx = String(timeText).length * CHAR_PX + 8
 
   if (!peek && !peekPlus && signatureState === 'ambient') {
-    // Ambient: ring + time only — hug content
     return Math.round(Math.max(72, Math.min(120, 8 + 28 + 6 + timePx)))
   }
 
-  let w = 8 + 28 + 6 // drag + ring + gap
+  let w = 8 + 28 + 6
 
   if (presentationMode === 'standard') {
     w = 8 + 12 + 4
@@ -58,7 +64,3 @@ export function computeCompactWidth({
 
   return Math.round(Math.max(84, Math.min(156, w)))
 }
-
-export const EXPANDED_W = 320
-export const EXPANDED_H = 236
-export const PILL_H = 36

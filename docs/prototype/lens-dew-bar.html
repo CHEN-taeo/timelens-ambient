@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TimeLens · Principia — 横露珠</title>
+<style>
+:root{--canvas:#06070B;--glass:rgba(15,15,24,.72);--border:rgba(255,255,255,.1);--accent:#7C3AED;--accent-bright:#A78BFA;--txt:#F4F3FF;--txt2:#A6A6BE;--muted:#55556E}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--canvas);color:var(--txt);font-family:Inter,system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:28px 16px 60px}
+.tnum{font-variant-numeric:tabular-nums}
+header{text-align:center;margin-bottom:8px}
+header h1{font-size:17px;font-weight:500}
+header h1 .o{color:var(--accent-bright)}
+header p{font-size:12px;color:var(--muted);margin-top:6px}
+#loadErr{display:none;margin:12px 0;padding:12px 16px;border-radius:12px;background:rgba(220,60,60,.12);border:1px solid rgba(255,100,100,.35);color:#ffb4b4;font-size:12px;line-height:1.6;max-width:640px}
+.view-link{margin:10px 0 4px;padding:10px 16px;border-radius:12px;background:rgba(124,58,237,.12);border:1px solid rgba(167,139,250,.35);font-size:13px;color:var(--txt2);text-align:center}
+.view-link a{color:var(--accent-bright);text-decoration:none;font-weight:500}
+.view-link a:hover{text-decoration:underline}
+.desktop{position:relative;width:min(920px,96vw);border-radius:14px;overflow:visible;border:1px solid rgba(255,255,255,.08);box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.menubar{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:linear-gradient(180deg,rgba(18,18,26,.96),rgba(10,10,16,.98));border-bottom:1px solid rgba(255,255,255,.06);position:relative;z-index:2;border-radius:14px 14px 0 0}
+.menubar .os{font-size:11px;color:var(--muted)}
+.menubar .clock{font-size:11px;color:var(--txt2);font-family:ui-monospace,monospace}
+.dock-slot{position:absolute;left:50%;top:0;transform:translateX(-50%);width:168px;height:36px;z-index:3}
+.dock-slot svg{display:block}
+.hit{position:absolute;inset:0;border:none;background:transparent;cursor:pointer;border-radius:18px;z-index:4}
+.peek{position:absolute;left:100%;top:50%;transform:translate(8px,-50%);height:30px;display:flex;align-items:center;padding:0 12px;border-radius:15px;background:rgba(18,18,28,.82);border:1px solid var(--border);font-size:12px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .38s,transform .38s;z-index:5}
+.peek.show{opacity:1;transform:translate(12px,-50%)}
+.peek .sub{color:var(--txt2);margin-left:8px;font-size:11px}
+.wallpaper{position:relative;height:560px;background:#050508;cursor:default}
+.wallpaper::after{content:'';position:absolute;inset:0;background:radial-gradient(60% 70% at 50% 36%,rgba(0,0,0,.1),rgba(0,0,0,.5));opacity:0;transition:opacity .45s;pointer-events:none}
+.wallpaper.focus-backdrop::after{opacity:1;pointer-events:auto}
+.panel-wrap{position:relative;height:0;overflow:visible}
+.card{position:absolute;top:6px;left:50%;width:344px;max-width:calc(100% - 28px);height:228px;border-radius:20px;background:linear-gradient(180deg,rgba(22,22,34,.78),rgba(13,13,22,.82));border:1px solid var(--border);box-shadow:0 20px 50px rgba(0,0,0,.5);overflow:hidden;opacity:0;transform:translateX(-50%) scaleY(.06);transform-origin:top center;transition:transform .48s cubic-bezier(.34,1.28,.5,1),opacity .34s;pointer-events:none;visibility:hidden;will-change:transform}
+.card.open{opacity:1;transform:translateX(-50%) scaleY(1);pointer-events:auto;visibility:visible}
+.card.closing{opacity:0;transform:translateX(-50%) scaleY(.04);pointer-events:none}
+.hint{padding:10px 14px 12px;font-size:11px;color:var(--muted);text-align:center;background:rgba(0,0,0,.25)}
+.hint kbd{font:10px ui-monospace,monospace;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1)}
+.tag{font-size:11px;color:var(--muted);margin-top:14px}
+.tag span{color:var(--accent-bright)}
+.card .top{height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.card .top .t{font-size:11px;color:var(--txt2)}
+.card .top .x{font-size:13px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px}
+.card .top .x:hover{color:var(--txt);background:rgba(255,255,255,.06)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
+.q{border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);border-radius:12px;padding:9px 10px;display:flex;flex-direction:column;gap:3px;opacity:0;transform:translateY(6px);transition:opacity .32s,transform .38s cubic-bezier(.34,1.2,.5,1)}
+.card.open .q{opacity:1;transform:translateY(0)}
+.card.open .q:nth-child(1){transition-delay:0ms}
+.card.open .q:nth-child(2){transition-delay:80ms}
+.card.open .q:nth-child(3){transition-delay:160ms}
+.card.open .q:nth-child(4){transition-delay:240ms}
+.peek.peek-plus .sub{opacity:1;max-width:120px}
+.peek .sub{opacity:0;max-width:0;overflow:hidden;display:inline-block;vertical-align:bottom;transition:opacity .35s,max-width .35s}
+.q .lab{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.q .big{font-size:13px;font-weight:500}
+.q .sm{font-size:10px;color:var(--txt2)}
+.q .bc{font-size:9px;color:var(--accent-bright)}
+.bar{display:flex;align-items:center;gap:14px;margin-top:16px;padding:12px 14px;border-radius:14px;background:var(--glass);border:1px solid var(--border);flex-wrap:wrap;justify-content:center;max-width:760px}
+.cats{display:flex;gap:6px}
+.cat{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent}
+.cat.active{border-color:rgba(255,255,255,.85);transform:scale(1.1)}
+.slid{display:flex;flex-direction:column;gap:4px;min-width:120px}
+.slid label{font-size:10px;color:var(--txt2);display:flex;justify-content:space-between}
+.slid label .v{color:var(--txt)}
+input[type=range]{-webkit-appearance:none;width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,.14);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent-bright);cursor:pointer}
+.b{border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--txt2);border-radius:9px;padding:7px 10px;font-size:11px;font-family:inherit;cursor:pointer}
+.switch{position:relative;width:32px;height:18px;border-radius:999px;background:rgba(255,255,255,.12);cursor:pointer}
+.switch.on{background:rgba(124,58,237,.6)}
+.switch::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s}
+.switch.on::after{transform:translateX(14px)}
+.flow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt2)}
+.legend{max-width:760px;width:94vw;margin-top:18px;font-size:11.5px;line-height:1.85;color:var(--muted);border-top:1px solid rgba(255,255,255,.05);padding-top:14px}
+.legend .k{color:var(--accent-bright)}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.seg-b{border:0;background:transparent;color:var(--muted);font:11px inherit;padding:7px 11px;cursor:pointer}
+.seg-b.on{background:rgba(124,58,237,.22);color:var(--txt)}
+.stage-seg{position:absolute;top:9px;left:12px;z-index:6;opacity:0;transition:opacity .4s .2s}
+.focus-stage.open .stage-seg{opacity:1}
+
+/* ===== Focus 舞台（冰山：露珠=瓶口，瓶身从岛底向下生长）===== */
+.focus-stage{
+  position:absolute;top:36px;left:50%;width:min(640px,92vw);height:0;
+  overflow:hidden;opacity:1;
+  transform:translateX(-50%);
+  pointer-events:none;visibility:hidden;
+  z-index:5;display:flex;flex-direction:column;
+  transition:height .62s cubic-bezier(.32,1.22,.46,1),visibility 0s linear .62s;
+}
+.focus-stage.pouring,.focus-stage.open,.focus-stage.closing{visibility:visible;transition:height .62s cubic-bezier(.32,1.22,.46,1),visibility 0s}
+.focus-stage.pouring:not(.open){height:0;pointer-events:none}
+.focus-stage.open{height:512px;overflow:visible;pointer-events:auto}
+.focus-stage.closing{height:0!important;overflow:hidden;pointer-events:none;transition:height .34s cubic-bezier(.5,0,.8,.4),visibility 0s linear .34s}
+.focus-stage .view-a{position:relative;flex:0 0 420px;height:420px;width:100%;overflow:hidden}
+.focus-pillars{flex:0 0 92px;display:flex;border-top:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(10,10,18,.72),rgba(6,6,12,.88));opacity:0;transform:translateY(8px);transition:opacity .45s .45s,transform .5s .42s cubic-bezier(.34,1.08,.48,1)}
+.focus-stage.open .focus-pillars{opacity:1;transform:translateY(0)}
+.fp-col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between;padding:8px 10px;border-right:1px solid rgba(255,255,255,.07)}
+.fp-col:last-child{border-right:0}
+.fp-col.active{background:rgba(255,255,255,.02)}
+.fp-col.warn{box-shadow:inset 0 0 0 1px rgba(252,165,165,.2)}
+.fp-glyph{font-size:10px;line-height:1;color:var(--fp-accent,#A78BFA)}
+.fp-head{display:flex;justify-content:space-between;align-items:center}
+.fp-gear{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:10px;padding:0}
+.fp-gear:hover{color:var(--txt)}
+.fp-title{font-size:11px;font-weight:500;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:0;background:transparent;padding:0;text-align:left;cursor:pointer;font-family:inherit;width:100%}
+.fp-title:hover{color:var(--accent-bright)}
+.fp-sub{font-size:9px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fp-link{border:0;background:transparent;padding:0;font-size:8px;color:var(--muted);text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(255,255,255,.15);font-family:inherit}
+.fp-link:hover{color:var(--txt2)}
+.fp-because{font-size:8px;color:rgba(166,166,190,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fp-spacer{height:8px}
+.fp-goal{height:2px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:4px}
+.fp-goal i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,rgba(74,124,255,.8),rgba(144,168,255,.6))}
+.fp-ripple{display:flex;height:3px;gap:1px;border-radius:999px;overflow:hidden;background:rgba(0,0,0,.3);margin-top:4px}
+.fp-ripple span{flex:1;min-width:0}
+.fp-row{display:flex;align-items:center;gap:8px;margin-top:2px}
+.fp-go{border:0;background:transparent;color:var(--accent-bright);font-size:9px;cursor:pointer;padding:0;font-family:inherit}
+.fp-muted{border:0;background:transparent;color:var(--muted);font-size:8px;cursor:pointer;padding:0;font-family:inherit}
+.fp-muted:hover{color:var(--txt2)}
+.fp-inp{width:100%;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.45);border-radius:4px;padding:3px 6px;font-size:9px;color:var(--txt);outline:none;font-family:inherit}
+.fp-inp:focus{border-color:rgba(124,58,237,.45)}
+.fp-pomo-run{display:flex;align-items:center;gap:8px;min-height:0;flex:1}
+.fp-ring{width:36px;height:36px;border-radius:50%;border:2px solid rgba(124,58,237,.55);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:8px;color:var(--txt)}
+.fp-pomo-meta{min-width:0;flex:1}
+.fp-warn{font-size:8px;color:#FCA5A5}
+.fp-mainline{font-size:10px;line-height:1.35;color:var(--txt);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#tlToast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);z-index:99;display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:12px;background:rgba(18,18,28,.92);border:1px solid rgba(255,255,255,.1);font-size:12px;color:var(--txt);opacity:0;pointer-events:none;transition:opacity .32s,transform .32s cubic-bezier(.34,1.1,.48,1);box-shadow:0 12px 40px rgba(0,0,0,.45)}
+#tlToast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+#tlToast .tl-undo{border:0;background:rgba(124,58,237,.22);color:var(--accent-bright);border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit}
+#tlToast .tl-undo:hover{background:rgba(124,58,237,.35)}
+.aw-badge{position:absolute;top:-28px;left:12px;z-index:7;font-size:9px;color:var(--muted);padding:2px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.35);opacity:0;transition:opacity .4s .3s}
+.aw-badge.on{color:#6EE7B7;border-color:rgba(110,231,183,.25)}
+.focus-stage.open .aw-badge{opacity:1}
+.desktop.focus-mode .dock-slot{z-index:8}
+.desktop.focus-mode .dock-slot svg{visibility:visible;opacity:1;filter:drop-shadow(0 2px 12px rgba(0,0,0,.35))}
+.desktop.focus-mode .dock-slot .hit{z-index:9}
+.dock-pour{position:absolute;left:50%;bottom:-1px;transform:translateX(-50%);width:3px;height:0;background:linear-gradient(180deg,color-mix(in srgb,var(--pour-hue,#818CF8) 88%,transparent),transparent);border-radius:999px;opacity:0;pointer-events:none;z-index:7}
+.desktop.focus-mode .dock-pour{animation:dockPour .55s cubic-bezier(.34,1.1,.48,1) .18s forwards}
+.desktop:not(.focus-mode) .dock-pour{animation:none;height:0;opacity:0}
+@keyframes dockPour{from{height:0;opacity:0}to{height:14px;opacity:.75}}
+.focus-stage.open .b-star-lip{display:none}
+.focus-stage.closing .strata-g{transform:scaleY(.02);transition:transform .35s cubic-bezier(.5,0,.8,.3)}
+.focus-stage.closing .stream-a,.focus-stage.closing .stream-b,.focus-stage.closing .stream-c{animation:none;opacity:0;transition:opacity .2s}
+.focus-stage.closing .fa-sand,.focus-stage.closing .fa-sand-grit,.focus-stage.closing .sand-dune{opacity:0;transition:opacity .25s}
+.focus-stage.closing .focus-pillars{opacity:0;transform:translateY(6px);transition:opacity .2s,transform .25s}
+.desktop.focus-mode .dock-slot .peek{display:none}
+.stage-x{position:absolute;top:-30px;right:8px;z-index:8;border:0;background:transparent;color:var(--muted);font-size:13px;cursor:pointer;padding:4px 7px;border-radius:7px;opacity:0;transition:opacity .4s .2s}
+.focus-stage.open .stage-x{opacity:1}
+.stage-x:hover{color:var(--txt);background:rgba(255,255,255,.06)}
+.stage-cap{position:absolute;left:50%;bottom:-32px;transform:translateX(-50%);z-index:6;text-align:center;font-size:11.5px;letter-spacing:.02em;color:var(--txt2);white-space:nowrap;opacity:0;transition:opacity .5s .55s}
+.focus-stage.open .stage-cap{opacity:1}
+.stage-cap em{font-style:italic;color:var(--accent-bright)}
+.view{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.focus-stage[data-view="A"] .view-b,.focus-stage[data-view="A"] .strip-b{display:none}
+.focus-stage[data-view="B"] .view-a,.focus-stage[data-view="B"] .legend-a{display:none}
+
+/* A · 剖面 */
+.strata-g{transform-box:fill-box;transform-origin:bottom;transform:scaleY(.02);transition:transform .9s cubic-bezier(.3,1.05,.4,1)}
+.focus-stage.open .strata-g{transform:scaleY(1)}
+.neck-pool{display:none}
+.splash-a{opacity:0;transform:scale(0);transform-origin:center;transform-box:fill-box}
+.focus-stage.open .splash-a{animation:splashHit .5s cubic-bezier(.34,1.4,.5,1) .85s forwards}
+@keyframes splashHit{0%{opacity:0;transform:scale(0)}70%{opacity:.7;transform:scale(1.15)}100%{opacity:.45;transform:scale(1)}}
+.fa-bubble{opacity:0}
+.focus-stage.open .fa-bubble{animation:faRise 5.5s ease-in infinite}
+.focus-stage.open .fa-bubble.b2{animation-delay:2.6s;animation-duration:6.8s}
+@keyframes faRise{0%{opacity:0;transform:translateY(0)}12%{opacity:.55}80%{opacity:.4}100%{opacity:0;transform:translateY(-120px)}}
+.legend-a{display:none}
+.stream-a{stroke-dasharray:var(--slen,240);stroke-dashoffset:var(--slen,240);opacity:0}
+.focus-stage.open .stream-a{animation:streamPour 1.2s cubic-bezier(.4,0,.2,1) .15s forwards}
+.stream-b,.stream-c{stroke-dasharray:var(--slen,240);stroke-dashoffset:var(--slen,240);opacity:0}
+.focus-stage.open .stream-b{animation:streamPour 1.3s cubic-bezier(.4,0,.2,1) .22s forwards}
+.focus-stage.open .stream-c{animation:streamPour 1.45s cubic-bezier(.4,0,.2,1) .08s forwards}
+.fa-spark{opacity:0}
+.focus-stage.open .fa-spark{animation:faSpark 2.8s ease-in infinite}
+.fa-sand,.fa-sand-grit{opacity:0;transform-box:fill-box;transform-origin:center}
+.focus-stage.open .fa-sand{animation:sandFall 2.6s ease-in infinite}
+.focus-stage.open .fa-sand-grit{animation:sandGrit .85s cubic-bezier(.34,1.2,.5,1) .88s forwards,sandShimmer 3.2s ease-in-out 1.1s infinite}
+.sand-plume{opacity:0}
+.focus-stage.open .sand-plume{animation:sandPlumeIn .55s ease .1s forwards}
+.sand-impact{opacity:0}
+.focus-stage.open .sand-impact{animation:sandImpactIn .7s cubic-bezier(.34,1.15,.5,1) .82s forwards}
+.sand-dune{transform-box:fill-box;transform-origin:center bottom;transform:scaleY(.15)}
+.focus-stage.open .sand-dune{animation:sandDuneRise .65s cubic-bezier(.34,1.25,.5,1) .86s forwards}
+.sand-shear{stroke-dasharray:120;stroke-dashoffset:120}
+.focus-stage.open .sand-shear{animation:sandShear 2.4s ease-in-out 1s infinite}
+.vessel-glass-inner,.vessel-spec,.vessel-refract{opacity:0}
+.now-label{opacity:0}
+.focus-stage.open .now-label{animation:labelStick .7s cubic-bezier(.34,1.08,.48,1) .95s forwards}
+.focus-stage.open .vessel-refract{animation:refractIn 1s cubic-bezier(.34,1.02,.48,1) .14s forwards}
+.focus-stage.open .vessel-glass-inner{animation:glassIn .85s cubic-bezier(.34,1.05,.48,1) .18s forwards}
+.focus-stage.open .vessel-spec{animation:glassSpecIn .9s cubic-bezier(.34,1.05,.48,1) .24s forwards}
+@keyframes refractIn{from{opacity:0}to{opacity:.92}}
+@keyframes labelStick{from{opacity:0}to{opacity:1}}
+@keyframes glassIn{from{opacity:0}to{opacity:1}}
+@keyframes glassSpecIn{from{opacity:0}to{opacity:1}}
+@keyframes faSpark{0%{opacity:0;transform:translateY(0)}15%{opacity:.7}85%{opacity:.35}100%{opacity:0;transform:translateY(18px)}}
+@keyframes sandFall{0%{opacity:0;transform:translateY(-8px) translateX(0)}10%{opacity:.78}88%{opacity:.38}100%{opacity:0;transform:translateY(16px) translateX(var(--dx,0px))}}
+@keyframes sandGrit{0%{opacity:0;transform:translateY(-4px) scale(.6)}100%{opacity:.55;transform:translateY(0) scale(1)}}
+@keyframes sandShimmer{0%,100%{opacity:.42}50%{opacity:.62}}
+@keyframes sandPlumeIn{to{opacity:1}}
+@keyframes sandImpactIn{0%{opacity:0}100%{opacity:1}}
+@keyframes sandDuneRise{0%{transform:scaleY(.15);opacity:0}70%{transform:scaleY(1.06);opacity:.85}100%{transform:scaleY(1);opacity:1}}
+@keyframes sandShear{0%,100%{stroke-dashoffset:120;opacity:.12}45%{stroke-dashoffset:40;opacity:.32}55%{stroke-dashoffset:20;opacity:.28}}
+@keyframes streamPour{0%{stroke-dashoffset:var(--slen,240);opacity:0}15%{opacity:.85}100%{stroke-dashoffset:0;opacity:.65}}
+.pool-fill{opacity:0;transform:scaleY(0);transform-origin:top center;transform-box:fill-box}
+.focus-stage.open .pool-fill{animation:neckFill .5s cubic-bezier(.34,1.1,.5,1) .05s forwards}
+@keyframes neckFill{to{opacity:.62;transform:scaleY(1)}}
+.splash-mound{opacity:0}
+.focus-stage.open .splash-mound{animation:splashHit .55s cubic-bezier(.34,1.4,.5,1) .9s forwards}
+@keyframes splashHit{0%{opacity:0;transform:scaleY(.3)}100%{opacity:1;transform:scaleY(1)}}
+.fa-legend{opacity:0;transition:opacity .5s .3s}
+.focus-stage.open .fa-legend{opacity:1}
+
+/* B · 星图（概念图日弧）*/
+.view-b{background:transparent;border:0;box-shadow:none}
+.b-arc{fill:none;stroke-width:1;stroke-dasharray:900;stroke-dashoffset:900;transition:stroke-dashoffset 1.4s ease}
+.focus-stage.open .b-arc{stroke-dashoffset:0}
+.b-ghost{fill:none;stroke:rgba(255,255,255,.1);stroke-width:0.6;stroke-dasharray:3 6}
+.u-threads{opacity:1}
+.b-sky-grid{opacity:0;transition:opacity .7s .18s}
+.focus-stage.open .b-sky-grid{opacity:1}
+.b-const{fill:none;stroke:rgba(148,156,198,0.14);stroke-width:0.65;stroke-linecap:round;stroke-linejoin:round;stroke-dashoffset:var(--clen,400);opacity:0}
+.focus-stage.open .b-const{animation:constDraw 1.35s cubic-bezier(.38,0,.18,1) .42s forwards}
+@keyframes constDraw{0%{stroke-dashoffset:var(--clen,400);opacity:0}18%{opacity:.85}100%{stroke-dashoffset:0;opacity:1}}
+.b-star-lip{opacity:0;transform:translateY(-3px) scale(.94);transform-box:fill-box;transform-origin:center top}
+.focus-stage.open .b-star-lip{animation:lipBloom .62s cubic-bezier(.34,1.15,.48,1) .06s forwards}
+@keyframes lipBloom{0%{opacity:0;transform:translateY(-5px) scale(.9)}72%{opacity:1;transform:translateY(.6px) scale(1.012)}100%{opacity:1;transform:translateY(0) scale(1)}}
+.b-star-pt{opacity:0;transform:scale(.15);transform-box:fill-box;transform-origin:center}
+.focus-stage.open .b-star-pt{animation:starBloom .62s cubic-bezier(.34,1.45,.48,1) both}
+@keyframes starBloom{0%{opacity:0;transform:scale(.12)}72%{opacity:1;transform:scale(1.14)}100%{opacity:1;transform:scale(1)}}
+.b-star-label{opacity:0}
+.focus-stage.open .b-star-label{animation:labelFade .45s ease both}
+.b-star-tag{opacity:0}
+.focus-stage.open .b-star-tag{animation:labelFade .5s ease both}
+@keyframes labelFade{from{opacity:0}to{opacity:1}}
+.b-star-now .b-sun-halo{animation:sunPulse 2.8s ease-in-out .2s infinite}
+.b-bg{opacity:0;transition:opacity 1s .15s}
+.focus-stage.open .b-bg{opacity:1}
+.fb-legend{opacity:0;transition:opacity .5s .25s}
+.focus-stage.open .fb-legend{opacity:1}
+.b-sun-halo{transform-box:fill-box;transform-origin:center;animation:sunPulse 3.4s ease-in-out infinite}
+@keyframes sunPulse{0%,100%{opacity:.35;transform:scale(1)}50%{opacity:.6;transform:scale(1.12)}}
+.strip-b{position:absolute;left:18px;right:18px;bottom:34px;z-index:4;display:flex;justify-content:space-between;padding:8px 14px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:rgba(255,255,255,.02);font:10px ui-monospace,monospace;letter-spacing:1px;color:var(--txt2);opacity:0;transition:opacity .5s .3s}
+.focus-stage.open .strip-b{opacity:1}
+.strip-b b{color:var(--txt);font-weight:500}
+</style>
+</head>
+<body>
+  <div id="loadErr"></div>
+  <div class="view-link">在 Chrome 打开（需先 <code>npm run dev</code>）：<a id="devUrl" href="/docs/prototype/lens-dew-bar.html" target="_blank" rel="noopener"></a></div>
+  <header>
+    <h1><span class="o">〰</span> TimeLens · Principia</h1>
+    <p>横露珠 · 超椭圆长条 · 弯月物理 · 潮汐航程 · 168×36</p>
+  </header>
+
+  <!-- 模拟真实桌面顶栏 -->
+  <div class="desktop">
+    <div class="menubar">
+      <span class="os">TimeLens Desktop</span>
+      <div class="dock-slot" id="slot">
+        <svg id="svg" width="168" height="36" viewBox="0 0 168 36" aria-hidden="true"></svg>
+        <button type="button" class="hit" id="hit" aria-label="点击展开"></button>
+        <div class="peek" id="peek"></div>
+        <div class="dock-pour" aria-hidden="true"></div>
+      </div>
+      <span class="clock tnum" id="clk">14:00</span>
+    </div>
+    <div class="wallpaper" id="wallpaper"></div>
+    <div class="focus-stage" id="card" data-view="A">
+      <span class="aw-badge" id="awBadge">演示数据</span>
+      <button class="stage-x" id="cardX" aria-label="收起">✕</button>
+      <svg class="view view-a" id="focusA" viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+      <div class="focus-pillars" id="focusPillars"></div>
+      <div class="stage-cap" id="stageCap"></div>
+    </div>
+    <div class="panel-wrap"></div>
+    <div class="hint">交互 · 悬停 400ms 窥视 / 800ms 窥视+ · 点击 Ma 200ms 后液滴生长 · <kbd>Esc</kbd> 收起 · 点心流屏息</div>
+  </div>
+  <div class="tag">状态 · <span id="stateName">AMBIENT</span> &nbsp;|&nbsp; 悬停窥视 · 点击展开</div>
+
+  <div class="bar">
+    <div class="cats" id="cats"></div>
+    <div class="slid"><label>液位 <span class="v tnum" id="fillVal">55%</span></label><input type="range" id="fill" min="8" max="92" value="55"/></div>
+    <div class="slid"><label>稳定度 <span class="v" id="stVal">稳</span></label><input type="range" id="steady" min="0" max="100" value="82"/></div>
+    <button class="b" id="bSeen">呼吸</button>
+    <button class="b" id="bCry">结晶</button>
+    <button class="b" id="bSet">告别</button>
+    <button class="b" id="bRst">重置</button>
+    <div class="flow">心流<div class="switch" id="flowSw"></div></div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+  <div id="tlToast" role="status" aria-live="polite"></div>
+  <script type="module" src="lens-dew-bar.js"></script>
+  <script>window.addEventListener('error',(e)=>{if(!e.filename||!e.filename.includes('lens-dew-bar'))return;const b=document.getElementById('loadErr');if(b){b.style.display='block';b.innerHTML='脚本未加载。请在项目根目录运行 <b>npm run dev</b>，浏览器打开：<br><b>http://127.0.0.1:5173/docs/prototype/lens-dew-bar.html</b>';}});</script>
+</body>
+</html>

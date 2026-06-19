@@ -28,6 +28,7 @@ export const useTimeStore = create((set, get) => ({
   connected: false,
   currentActivity: null,
   todayTotals: { totalsByCategory: {}, productiveSeconds: 0, totalSeconds: 0 },
+  todaySessions: [],
   dayStrip: [],
 
   pomodoro: { ...initialPomodoro },
@@ -41,6 +42,7 @@ export const useTimeStore = create((set, get) => ({
   setConnected: (connected) => set({ connected }),
   setCurrentActivity: (currentActivity) => set({ currentActivity }),
   setTodayTotals: (todayTotals) => set({ todayTotals }),
+  setTodaySessions: (todaySessions) => set({ todaySessions }),
   setDayStrip: (dayStrip) => set({ dayStrip }),
 
   clearToast: () => set({ toast: null }),

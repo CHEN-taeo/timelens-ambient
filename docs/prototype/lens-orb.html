@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TimeLens · The Lens — 重设计原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --canvas:#07080C; --glass:rgba(13,13,20,0.82);
+    --border:rgba(255,255,255,0.08); --accent:#7C3AED; --accent-bright:#A78BFA;
+    --txt:#F1F0FF; --txt2:#A0A0B8; --muted:#50506A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 700px at 50% -10%,#0d0e16,var(--canvas) 60%),var(--canvas);
+    color:var(--txt);font-family:'Inter',system-ui,sans-serif;min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;padding:36px 20px 80px;overflow-x:hidden;
+  }
+  .tnum{font-variant-numeric:tabular-nums}
+  header{text-align:center;margin-bottom:6px}
+  header h1{font-size:17px;font-weight:500;letter-spacing:.5px}
+  header h1 .o{color:var(--accent-bright)}
+  header p{font-size:12px;color:var(--muted);margin-top:6px}
+
+  .layout{display:flex;gap:28px;align-items:flex-start;margin-top:28px;max-width:1080px;width:100%;justify-content:center;flex-wrap:wrap}
+  .stage-wrap{display:flex;flex-direction:column;align-items:center;gap:16px}
+  .stage{
+    position:relative;width:760px;max-width:92vw;height:380px;border-radius:24px;
+    background:linear-gradient(180deg,rgba(255,255,255,.015),rgba(0,0,0,.2));
+    border:1px solid rgba(255,255,255,.05);overflow:hidden;
+  }
+  .stage::after{content:'';position:absolute;inset:0;background:radial-gradient(560px 280px at 30% 45%,rgba(124,58,237,.06),transparent 70%);pointer-events:none}
+  svg{display:block}
+
+  /* Peek label — light through the lens */
+  .peek{
+    position:absolute;left:280px;top:172px;height:36px;display:flex;align-items:center;
+    padding:0 16px 0 14px;border-radius:0 18px 18px 0;
+    background:linear-gradient(90deg,rgba(20,20,30,.0),rgba(18,18,28,.72) 30%);
+    backdrop-filter:blur(12px);
+    font-size:13px;letter-spacing:.4px;color:var(--txt);white-space:nowrap;
+    opacity:0;transform:translateX(-12px);transition:opacity .4s cubic-bezier(.22,1,.36,1),transform .4s;
+    pointer-events:none;
+  }
+  .peek.show{opacity:1;transform:translateX(0)}
+  .peek .sub{color:var(--txt2);margin-left:8px;font-size:11px}
+
+  /* Focus bloom card */
+  .card{
+    position:absolute;left:150px;top:118px;width:336px;height:236px;border-radius:22px;
+    background:var(--glass);border:1px solid var(--border);
+    backdrop-filter:blur(24px) saturate(170%);
+    box-shadow:0 18px 50px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.04);
+    opacity:0;transform:scale(.18);transform-origin:6px 62px;
+    transition:opacity .42s cubic-bezier(.22,1,.36,1),transform .48s cubic-bezier(.34,1.4,.5,1);
+    pointer-events:none;overflow:hidden;
+  }
+  .card.open{opacity:1;transform:scale(1);pointer-events:auto}
+  .card .top{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid rgba(255,255,255,.05)}
+  .card .top .t{font-size:11px;color:var(--txt2)}
+  .card .top .x{font-size:12px;color:var(--muted);cursor:pointer}
+  .grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;padding:10px;height:calc(100% - 30px)}
+  .q{border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02);border-radius:12px;padding:9px 10px;display:flex;flex-direction:column;gap:3px}
+  .q .lab{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+  .q .big{font-size:13px;color:var(--txt);font-weight:500}
+  .q .sm{font-size:10px;color:var(--txt2)}
+  .q .because{font-size:9px;color:var(--accent-bright);opacity:.85;cursor:pointer}
+
+  .tag{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+  .tag span{color:var(--accent-bright)}
+
+  .panel{width:320px;background:var(--glass);backdrop-filter:blur(20px) saturate(180%);border:1px solid var(--border);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:16px}
+  .panel h2{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .group{display:flex;flex-direction:column;gap:9px}
+  .group>label{font-size:11px;color:var(--txt2);display:flex;justify-content:space-between}
+  .group>label .v{color:var(--txt)}
+  .cats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .cat{border:1px solid var(--border);background:rgba(255,255,255,.02);border-radius:10px;padding:7px 2px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;transition:.2s}
+  .cat:hover{background:rgba(255,255,255,.05)} .cat.active{border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.06)}
+  .cat .sw{width:11px;height:11px;border-radius:50%} .cat .nm{font-size:8px;color:var(--txt2)}
+  input[type=range]{-webkit-appearance:none;width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,.12);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent-bright);box-shadow:0 0 8px rgba(167,139,250,.5);cursor:pointer}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  button.act{border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--txt2);border-radius:10px;padding:9px 6px;font-size:11px;font-family:inherit;cursor:pointer;transition:.18s}
+  button.act:hover{border-color:var(--accent);color:var(--txt);background:rgba(124,58,237,.12)}
+  button.act.full{grid-column:span 2}
+  .toggle{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--txt2)}
+  .switch{position:relative;width:36px;height:20px;border-radius:999px;background:rgba(255,255,255,.1);cursor:pointer;transition:.2s}
+  .switch.on{background:rgba(124,58,237,.6)}
+  .switch::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s}
+  .switch.on::after{transform:translateX(16px)}
+  .hint{font-size:11px;color:var(--muted);text-align:center}
+  .hint b{color:var(--txt2);font-weight:500}
+  .legend{max-width:760px;width:92vw;margin-top:24px;font-size:11.5px;line-height:1.85;color:var(--muted);border-top:1px solid rgba(255,255,255,.05);padding-top:16px}
+  .legend .k{color:var(--accent-bright)}
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="o">◉</span> TimeLens · The Lens</h1>
+    <p>重设计 — 本体是一颗会呼吸的镜珠 · 圆形永不发糙 · 点击即绽放</p>
+  </header>
+
+  <div class="layout">
+    <div class="stage-wrap">
+      <div class="stage" id="stage">
+        <svg id="svg" width="760" height="380" viewBox="0 0 760 380"></svg>
+        <div class="peek" id="peek"></div>
+        <div class="card" id="card">
+          <div class="top"><span class="t" id="cardTitle">现在</span><span class="x" id="cardX">✕</span></div>
+          <div class="grid">
+            <div class="q">
+              <span class="lab">现在</span>
+              <span class="big" id="qNow">Cursor</span>
+              <span class="sm" id="qNowDur">已 36min</span>
+              <span class="because" id="qBecause">因为：cursor.exe · 规则 #2 ↺</span>
+            </div>
+            <div class="q">
+              <span class="lab">航程</span>
+              <span class="big" id="qVoyage">14:00 · 过半</span>
+              <span class="sm" id="qVoyageCmp">比昨天此刻多 18min</span>
+            </div>
+            <div class="q">
+              <span class="lab">番茄</span>
+              <span class="big">18:42</span>
+              <span class="sm" id="qPomo">React 组件 · 稳</span>
+            </div>
+            <div class="q">
+              <span class="lab">主线</span>
+              <span class="big">完成 Lens 重设计</span>
+              <span class="sm">推进 ████░░ 62%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tag">状态 · <span id="stateName">AMBIENT</span> &nbsp;|&nbsp; 悬停镜珠看窥视 · 点击镜珠绽放</div>
+    </div>
+
+    <div class="panel">
+      <h2>感知 · 当前类别</h2>
+      <div class="cats" id="cats"></div>
+      <div class="group"><label>专注稳定度 <span class="v" id="steadyVal">玻璃般静</span></label><input type="range" id="steady" min="0" max="100" value="82"/></div>
+      <div class="group"><label>今日时间（环 · 航程）<span class="v tnum" id="timeVal">14:00</span></label><input type="range" id="time" min="0" max="100" value="55"/></div>
+      <div class="group"><label>实际积累（液位）<span class="v tnum" id="fillVal">52%</span></label><input type="range" id="fill" min="4" max="96" value="55"/></div>
+      <h2>镜子 · 峰与终</h2>
+      <div class="btns">
+        <button class="act" id="btnSeen">被看见 · 呼吸</button>
+        <button class="act" id="btnCrystal">完成番茄 · 结晶</button>
+        <button class="act full" id="btnSettle">日结 · 蒸发告别</button>
+        <button class="act full" id="btnReset">重置</button>
+      </div>
+      <div class="toggle"><span>心流保护（淡至 22%·静默）</span><div class="switch" id="flowSwitch"></div></div>
+      <div class="hint"><b>点击镜珠</b> 看绽放 / 收起</div>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+<script>
+const svg=document.getElementById('svg');
+const CATS={
+  coding:{hue:'#818CF8',label:'编程开发',app:'Cursor',amp:1.6,freq:.55,deep:true},
+  learning:{hue:'#FCD34D',label:'学习资料',app:'Obsidian',amp:2.0,freq:.7,deep:true},
+  ai:{hue:'#67E8F9',label:'AI 工具',app:'claude.ai',amp:1.8,freq:.62,deep:true},
+  project:{hue:'#6EE7B7',label:'项目开发',app:'idea-forge',amp:1.5,freq:.5,deep:true},
+  comms:{hue:'#F9A8D4',label:'沟通协作',app:'Slack',amp:3.2,freq:1.05,deep:false},
+  entertainment:{hue:'#FCA5A5',label:'娱乐摸鱼',app:'bilibili',amp:6.5,freq:1.7,deep:false},
+};
+const ORB={cx:200,cy:190,R:66,ring:78};
+const st={cat:'coding',steady:.82,timeP:.55,fillP:.55,flow:false,focus:false,
+  phase:0,breath:0,crystal:0,crystalOn:false,settle:'none',settleT:0,evapFill:0,particles:[],ended:false};
+
+function h2r(h){const n=parseInt(h.slice(1),16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255}}
+function lerp(a,b,t){return a+(b-a)*t}
+function mix(c1,c2,t){const a=h2r(c1),b=h2r(c2);return`rgb(${Math.round(lerp(a.r,b.r,t))},${Math.round(lerp(a.g,b.g,t))},${Math.round(lerp(a.b,b.b,t))})`}
+function reckon(p){const s=[[0,'#4A7CFF'],[.3,'#90A8FF'],[.55,'#F0A030'],[.78,'#C07018'],[1,'#30B060']];
+  for(let i=0;i<s.length-1;i++){if(p<=s[i+1][0])return mix(s[i][1],s[i+1][1],(p-s[i][0])/(s[i+1][0]-s[i][0]))}return s[s.length-1][1]}
+
+const C=2*Math.PI*ORB.ring;
+svg.innerHTML=`
+<defs>
+  <clipPath id="orbClip"><circle cx="${ORB.cx}" cy="${ORB.cy}" r="${ORB.R}"/></clipPath>
+  <radialGradient id="glass" cx="38%" cy="32%" r="70%">
+    <stop offset="0%" stop-color="rgba(255,255,255,0.16)"/>
+    <stop offset="42%" stop-color="rgba(255,255,255,0.03)"/>
+    <stop offset="100%" stop-color="rgba(0,0,0,0.30)"/>
+  </radialGradient>
+  <linearGradient id="liq" x1="0" y1="0" x2="0" y2="1">
+    <stop id="l0" offset="0"/><stop id="l1" offset=".55"/><stop id="l2" offset="1"/>
+  </linearGradient>
+  <radialGradient id="bead" cx="36%" cy="30%" r="68%">
+    <stop offset="0%" stop-color="#fff" stop-opacity="1"/><stop offset="45%" stop-color="#fff" stop-opacity=".8"/><stop id="beadO" offset="100%" stop-opacity=".2"/>
+  </radialGradient>
+  <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
+  <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<circle id="halo" cx="${ORB.cx}" cy="${ORB.cy}" r="${ORB.R+6}" fill="none"/>
+<circle id="ringTrack" cx="${ORB.cx}" cy="${ORB.cy}" r="${ORB.ring}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2.5"/>
+<circle id="ringProg" cx="${ORB.cx}" cy="${ORB.cy}" r="${ORB.ring}" fill="none" stroke-width="2.5" stroke-linecap="round"
+        transform="rotate(-90 ${ORB.cx} ${ORB.cy})" stroke-dasharray="${C}" stroke-dashoffset="${C}"/>
+<circle cx="${ORB.cx}" cy="${ORB.cy}" r="${ORB.R}" fill="rgba(10,10,16,0.5)" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+<g clip-path="url(#orbClip)">
+  <ellipse id="caustic" filter="url(#soft)" opacity=".5"/>
+  <path id="liqBody"/><path id="specular" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1.3"/>
+  <g id="particles"></g>
+</g>
+<circle cx="${ORB.cx}" cy="${ORB.cy}" r="${ORB.R}" fill="url(#glass)" pointer-events="none"/>
+<ellipse cx="${ORB.cx-22}" cy="${ORB.cy-26}" rx="20" ry="12" fill="rgba(255,255,255,0.14)" filter="url(#soft)" pointer-events="none"/>
+<circle id="bead" r="5.5" fill="url(#bead)"/>
+<polygon id="crystal" opacity="0"/>
+<circle id="hit" cx="${ORB.cx}" cy="${ORB.cy}" r="${ORB.ring+6}" fill="transparent" style="cursor:pointer"/>
+`;
+const el=id=>document.getElementById(id);
+const bead=el('bead'),crystal=el('crystal');
+
+function gauss(x,mu,s){const d=(x-mu)/s;return Math.exp(-d*d)}
+function surfY(xr,baseY,amp,freq,lift){
+  const x=xr*2*ORB.R;
+  const e=lift*(gauss(x,0,ORB.R*.5)+gauss(x,2*ORB.R,ORB.R*.5));
+  const w=amp*Math.sin(xr*Math.PI*2*(1+freq)+st.phase*freq*3);
+  return baseY-e-w;
+}
+function render(){
+  const c=CATS[st.cat],instab=1-st.steady;
+  let fillP=st.fillP;
+  if(st.settle==='evaporating')fillP=st.evapFill*(1-st.settleT);
+  if(st.settle==='ended')fillP=0;
+  const breath=st.breath>0?Math.sin(st.breath*Math.PI):0;
+  fillP=Math.min(.97,fillP+breath*.05);
+  const baseY=ORB.cy+ORB.R-fillP*2*ORB.R;
+  let amp=c.amp*(.3+instab*1.4);
+  if(c.deep&&st.steady>.7)amp*=.5; if(st.flow)amp*=.15; amp*=(1-breath*.6);
+  const lift=4+amp*.7,freq=c.freq;
+  const N=48;let top='';
+  for(let i=0;i<=N;i++){const xr=i/N,x=ORB.cx-ORB.R+xr*2*ORB.R,y=surfY(xr,baseY,amp,freq,lift);top+=(i?` L ${x},${y}`:`M ${x},${y}`)}
+  const body=`${top} L ${ORB.cx+ORB.R},${ORB.cy+ORB.R+4} L ${ORB.cx-ORB.R},${ORB.cy+ORB.R+4} Z`;
+  el('liqBody').setAttribute('d',body); el('liqBody').setAttribute('fill','url(#liq)');
+  el('specular').setAttribute('d',top);
+  const hue=c.hue,q=1;
+  el('l0').setAttribute('stop-color',hue);el('l0').setAttribute('stop-opacity',(st.flow?.18:.42)*q);
+  el('l1').setAttribute('stop-color',hue);el('l1').setAttribute('stop-opacity',(st.flow?.26:.52)*q);
+  el('l2').setAttribute('stop-color',hue);el('l2').setAttribute('stop-opacity',(st.flow?.34:.64)*q);
+  el('beadO').setAttribute('stop-color',hue);
+  const ca=el('caustic');ca.setAttribute('cx',ORB.cx+ORB.R*.2);ca.setAttribute('cy',baseY+12);
+  ca.setAttribute('rx',Math.max(16,ORB.R*.5));ca.setAttribute('ry',5);ca.setAttribute('fill',hue);
+
+  // ring = day voyage
+  const rc=reckon(st.timeP);
+  el('ringProg').setAttribute('stroke',rc);
+  el('ringProg').setAttribute('stroke-dashoffset',C*(1-st.timeP));
+  el('ringProg').setAttribute('filter','url(#glow)');
+
+  // bead
+  const bxr=.68,bx=ORB.cx-ORB.R+bxr*2*ORB.R;let by=surfY(bxr,baseY,amp,freq,lift);
+  const j=instab*(st.flow?0:3);const jx=Math.sin(st.phase*9)*j,jy=Math.cos(st.phase*11)*j*.6;
+  bead.setAttribute('cx',bx+jx);bead.setAttribute('cy',by+jy);
+  bead.setAttribute('r',st.crystalOn?5.5*(1-st.crystal):5.5);bead.setAttribute('filter','url(#glow)');
+  bead.setAttribute('opacity',st.ended?(.6+.4*Math.sin(st.phase*.8)):1);
+
+  if(st.crystalOn||st.settle==='ended'){
+    const cx=st.settle==='ended'?ORB.cx:bx+jx, cyy=st.settle==='ended'?ORB.cy:by+jy;
+    const pr=st.settle==='ended'?1:Math.sin(st.crystal*Math.PI),s=4+pr*6;
+    crystal.setAttribute('points',`${cx},${cyy-s} ${cx+s*.7},${cyy} ${cx},${cyy+s} ${cx-s*.7},${cyy}`);
+    crystal.setAttribute('fill',st.settle==='ended'?rc:'#fff');crystal.setAttribute('opacity',st.settle==='ended'?.9:pr);crystal.setAttribute('filter','url(#glow)');
+  }else crystal.setAttribute('opacity',0);
+
+  // breathing halo
+  const halo=el('halo');const hb=.5+.5*Math.sin(st.phase*.9);
+  halo.setAttribute('stroke',hue);halo.setAttribute('stroke-width',1.5);
+  halo.setAttribute('opacity',st.flow?.05:(.06+hb*.10));halo.setAttribute('r',ORB.R+5+hb*2.5);
+}
+function spawn(){const hue=CATS[st.cat].hue;st.particles.push({x:ORB.cx-ORB.R+Math.random()*2*ORB.R,y:ORB.cy+ORB.R-st.evapFill*(1-st.settleT)*2*ORB.R,vy:.4+Math.random()*.8,life:1,r:1+Math.random()*1.8,hue})}
+function rp(){el('particles').innerHTML=st.particles.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.r.toFixed(1)}" fill="${p.hue}" opacity="${(p.life*.5).toFixed(2)}"/>`).join('')}
+
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;st.phase+=dt;
+  if(st.breath>0){st.breath+=dt/2.4;if(st.breath>=1)st.breath=0}
+  if(st.crystalOn){st.crystal+=dt/1.6;if(st.crystal>=1){st.crystalOn=false;st.crystal=0}}
+  if(st.settle==='evaporating'){st.settleT+=dt/4.2;if(Math.random()<.6)spawn();
+    st.particles.forEach(p=>{p.y-=p.vy;p.life-=dt*.5});st.particles=st.particles.filter(p=>p.life>0);
+    if(st.settleT>=1){st.settle='ended';st.ended=true;el('stateName').textContent='SETTLE · 已抵达'}}
+  if(st.settle==='ended'){st.particles.forEach(p=>{p.y-=p.vy;p.life-=dt*.5});st.particles=st.particles.filter(p=>p.life>0)}
+  render();rp();requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// controls
+const cats=el('cats');
+Object.entries(CATS).forEach(([k,c])=>{const d=document.createElement('div');d.className='cat'+(k===st.cat?' active':'');
+  d.innerHTML=`<span class="sw" style="background:${c.hue}"></span><span class="nm">${c.label}</span>`;
+  d.onclick=()=>{st.cat=k;document.querySelectorAll('.cat').forEach(x=>x.classList.remove('active'));d.classList.add('active');syncCard()};cats.appendChild(d)});
+const steady=el('steady');steady.oninput=()=>{st.steady=steady.value/100;el('steadyVal').textContent=st.steady>.75?'玻璃般静':st.steady>.45?'微澜':'频繁切换'};
+const time=el('time');time.oninput=()=>{st.timeP=time.value/100;const m=9*60+st.timeP*9*60;el('timeVal').textContent=`${String(Math.floor(m/60)).padStart(2,'0')}:${String(Math.floor(m%60)).padStart(2,'0')}`;syncCard()};
+const fill=el('fill');fill.oninput=()=>{st.fillP=fill.value/100;el('fillVal').textContent=`${fill.value}%`;syncCard()};
+
+el('btnSeen').onclick=()=>{if(st.flow)return;st.breath=.001;el('stateName').textContent='被看见 · 呼吸';setTimeout(()=>el('stateName').textContent=st.focus?'FOCUS':'AMBIENT',2400)};
+el('btnCrystal').onclick=()=>{st.crystalOn=true;st.crystal=.001;el('stateName').textContent='+1 🍅 · 完整';setTimeout(()=>el('stateName').textContent=st.focus?'FOCUS':'AMBIENT',1800)};
+el('btnSettle').onclick=()=>{st.settle='evaporating';st.settleT=0;st.evapFill=st.fillP;st.particles=[];closeCard();el('stateName').textContent='SETTLE · 蒸发中'};
+el('btnReset').onclick=()=>{st.settle='none';st.ended=false;st.settleT=0;st.particles=[];st.breath=0;st.crystalOn=false;st.crystal=0;closeCard();el('stateName').textContent='AMBIENT'};
+const fsw=el('flowSwitch');fsw.onclick=()=>{st.flow=!st.flow;fsw.classList.toggle('on',st.flow);el('stateName').textContent=st.flow?'FLOW · 屏息':(st.focus?'FOCUS':'AMBIENT')};
+
+// peek + focus
+const stage=el('stage'),peek=el('peek'),card=el('card'),hit=el('hit');
+let pt1,pt2;
+function showPeek(){if(st.flow||st.focus||st.settle!=='none')return;const c=CATS[st.cat];const mins=Math.round(st.fillP*300);
+  peek.innerHTML=`${c.label} · ${Math.floor(mins/60)}h${mins%60}m<span class="sub" id="ps"></span>`;peek.classList.add('show');
+  pt2=setTimeout(()=>{const ps=document.getElementById('ps');if(ps)ps.textContent=`${c.app} · ${Math.round(st.fillP*100)}min`},800)}
+hit.addEventListener('mouseenter',()=>{pt1=setTimeout(showPeek,400)});
+hit.addEventListener('mouseleave',()=>{clearTimeout(pt1);clearTimeout(pt2);peek.classList.remove('show')});
+function openCard(){st.focus=true;peek.classList.remove('show');card.classList.add('open');el('stateName').textContent='FOCUS · 绽放';syncCard()}
+function closeCard(){st.focus=false;card.classList.remove('open');if(st.settle==='none')el('stateName').textContent='AMBIENT'}
+hit.addEventListener('click',()=>{st.focus?closeCard():openCard()});
+el('cardX').onclick=closeCard;
+function syncCard(){const c=CATS[st.cat];el('qNow').textContent=c.app;el('qNowDur').textContent=`已 ${Math.round(st.fillP*60)}min`;
+  el('qBecause').textContent=`因为：${c.app.toLowerCase()} · 规则 #2 ↺`;
+  const m=9*60+st.timeP*9*60;el('qVoyage').textContent=`${String(Math.floor(m/60)).padStart(2,'0')}:${String(Math.floor(m%60)).padStart(2,'0')} · ${st.timeP>.5?'过半':'上半'}`;
+  el('qPomo').textContent=`${c.label} · ${st.steady>.6?'稳':'有点偏航'}`}
+syncCard();
+
+el('legend').innerHTML=`
+<b style="color:var(--txt2)">为什么是镜珠 ——</b> 圆形与圆环在任何系统都<span class="k">完美抗锯齿</span>（修掉"边缘糙"）；一个圆形大目标，<span class="k">点击永远可靠</span>（修掉"点不动"）；"Lens=镜"本就是圆，这是回到品牌本名，不是新发明。<br>
+<span class="k">液色</span>=类别 · <span class="k">液位</span>=积累 · <span class="k">外环</span>=一日航程(dead reckoning 色 + 弧长进度) · <span class="k">弯月静/动</span>=专注稳定度 · <span class="k">呼吸光晕</span>=活着。<br>
+<span class="k">窥视</span>=光从镜片右侧透出文字，镜珠不动。 <span class="k">绽放</span>=点击镜珠液滴展开成四格(现在/航程/番茄/主线)。 <span class="k">蒸发告别</span>=日结留一颗水晶。 <span class="k">心流</span>=淡至 22%、屏息。
+`;
+</script>
+</body>
+</html>

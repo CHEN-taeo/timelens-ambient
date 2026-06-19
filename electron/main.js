@@ -8,16 +8,40 @@ let win = null
 let tray = null
 let savedCompactBounds = null
 
-const INITIAL_WIDTH = 100
-const INITIAL_HEIGHT = 36
+const INITIAL_WIDTH = 140
+const INITIAL_HEIGHT = 30
 const TOP_MARGIN = 12
+
+function compactTopMargin() {
+  const workArea = screen.getPrimaryDisplay().workArea
+  return Math.max(10, Math.round(workArea.height * 0.016))
+}
+
+/** 露珠水平居中于工作区，垂直贴顶（中上） */
+function centerTopBounds(width, height, dragW = 6, dewW = null) {
+  if (!win || win.isDestroyed()) return
+  const workArea = screen.getPrimaryDisplay().workArea
+  const w = Math.max(80, Math.round(width))
+  const h = Math.max(28, Math.round(height))
+  const strip = Math.max(0, Math.round(dragW))
+  const dew = Math.max(48, Math.round(dewW ?? w - strip))
+  const topMargin = Math.max(10, Math.round(workArea.height * 0.016))
+  const screenCenterX = workArea.x + workArea.width / 2
+  const x = Math.round(screenCenterX - strip - dew / 2)
+  win.setBounds({
+    x,
+    y: workArea.y + topMargin,
+    width: w,
+    height: h,
+  })
+}
 
 /** Resize compact pill — keeps vertical position, centers horizontally. */
 function anchorResize(width, height) {
   if (!win || win.isDestroyed()) return
   const bounds = win.getBounds()
   const w = Math.max(80, Math.round(width))
-  const h = Math.max(36, Math.round(height))
+  const h = Math.max(28, Math.round(height))
   const center = bounds.x + bounds.width / 2
   win.setBounds({
     x: Math.round(center - w / 2),
@@ -39,11 +63,17 @@ function setOverlayExpanded() {
 }
 
 function createWindow() {
+  const workArea = screen.getPrimaryDisplay().workArea
+  const topMargin = compactTopMargin()
+  const dragW = 6
+  const screenCenterX = workArea.x + workArea.width / 2
+  const startX = Math.round(screenCenterX - dragW - (INITIAL_WIDTH - dragW) / 2)
+
   win = new BrowserWindow({
     width: INITIAL_WIDTH,
     height: INITIAL_HEIGHT,
-    x: Math.round((screen.getPrimaryDisplay().workAreaSize.width - INITIAL_WIDTH) / 2),
-    y: TOP_MARGIN,
+    x: startX,
+    y: workArea.y + topMargin,
     transparent: true,
     backgroundColor: '#00000000',
     frame: false,
@@ -95,7 +125,7 @@ ipcMain.handle('window:getAnchor', () => {
   }
 })
 
-ipcMain.on('window:setMode', (_evt, { mode, width, height, screenX, screenY }) => {
+ipcMain.on('window:setMode', (_evt, { mode, width, height, screenX, screenY, dragW, dewW }) => {
   if (mode === 'expanded') {
     savedCompactBounds = win.getBounds()
     setOverlayExpanded()
@@ -103,25 +133,28 @@ ipcMain.on('window:setMode', (_evt, { mode, width, height, screenX, screenY }) =
   }
 
   const w = Math.max(80, Math.round(width || 100))
-  const h = Math.max(36, Math.round(height || 36))
+  const h = Math.max(28, Math.round(height || 36))
 
   if (screenX != null && screenY != null) {
     win.setBounds({ x: Math.round(screenX), y: Math.round(screenY), width: w, height: h })
-  } else if (savedCompactBounds) {
-    win.setBounds({
-      x: savedCompactBounds.x,
-      y: savedCompactBounds.y,
-      width: w,
-      height: h,
-    })
   } else {
-    anchorResize(w, h)
+    centerTopBounds(w, h, dragW, dewW)
   }
   savedCompactBounds = null
 })
 
-ipcMain.on('window:fit', (_evt, { width, height }) => {
-  anchorResize(width, height)
+ipcMain.on('window:fit', (_evt, { width, height, centerTop, dragW, dewW }) => {
+  if (centerTop !== false) centerTopBounds(width, height, dragW, dewW)
+  else anchorResize(width, height)
+})
+
+ipcMain.on('window:centerTop', (_evt, { width, height, dragW, dewW }) => {
+  centerTopBounds(
+    width ?? win?.getBounds().width ?? INITIAL_WIDTH,
+    height ?? win?.getBounds().height ?? INITIAL_HEIGHT,
+    dragW,
+    dewW
+  )
 })
 
 let soundEnabled = true

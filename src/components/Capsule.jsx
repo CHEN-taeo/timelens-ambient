@@ -6,17 +6,17 @@ import { deadReckoning, isFlowState } from '../utils/deadReckoning.js'
 import { playConfirm } from '../utils/sounds.js'
 import { useLiveClock } from '../hooks/useLiveClock.js'
 import { useSettingsStore } from '../store/useSettingsStore.js'
-import { computeCompactWidth, EXPANDED_W, EXPANDED_H, PILL_H, MENISCUS_LIQUID_AMBIENT, MENISCUS_LIQUID_HOVER, MENISCUS_LIQUID_PEEK, MENISCUS_LIQUID_PEEK_PLUS } from '../utils/capsuleLayout.js'
+import { computeCompactWidth, EXPANDED_W, EXPANDED_H, PILL_H, MENISCUS_DEW_W } from '../utils/capsuleLayout.js'
 import { isWorkDayEnded } from '../utils/settings.js'
 import {
   POUR_DURATION_MS,
-  POUR_BOARD_START,
 } from '../utils/meniscusPourGeometry.js'
 import LensRing from './LensRing.jsx'
 import MeniscusVessel from './MeniscusVessel.jsx'
 import GravityPour from './GravityPour.jsx'
 import GlowIndicator from './GlowIndicator.jsx'
 import BentoBoard from './BentoBoard.jsx'
+import FocusBoard from './FocusBoard.jsx'
 import PeakToast from './PeakToast.jsx'
 
 function fmt(seconds = 0) {
@@ -41,9 +41,7 @@ function shortApp(app = '') {
 
 const spring = { type: 'spring', stiffness: 300, damping: 28 }
 const dropEase = { duration: 0.38, ease: [0.34, 1.56, 0.64, 1] }
-const peekEase = { duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }
-const surfaceEase = { duration: 0.42, ease: [0.22, 1, 0.36, 1] }
-const wetEase = { duration: 0.12, ease: [0.25, 0.1, 0.25, 1] }
+const peekEase = { duration: 0.38, ease: [0.25, 0.1, 0.25, 1] }
 const PEEK_DELAY_MS = 400
 const PEEK_PLUS_DELAY_MS = 800
 const FOCUS_MA_MS = 200
@@ -93,14 +91,15 @@ export default function Capsule() {
   const glowColor = warning ? CATEGORIES.entertainment.glow : inBreak ? CATEGORIES.project.glow : cat.glow
   const edgeColor = warning ? '#FCA5A5' : inBreak ? '#6EE7B7' : cat.color
 
+  const sessionSeconds =
+    currentActivity?.startedAt
+      ? Math.max(0, Math.round((Date.now() - currentActivity.startedAt) / 1000))
+      : 0
+
   const sessionMins =
     currentActivity?.startedAt
       ? Math.max(0, Math.round((Date.now() - currentActivity.startedAt) / 60000))
       : 0
-
-  const sessionSeconds = currentActivity?.startedAt
-    ? Math.max(0, Math.round((Date.now() - currentActivity.startedAt) / 1000))
-    : 0
 
   const flowActive = isFlowState({
     sessionSeconds,
@@ -139,21 +138,16 @@ export default function Capsule() {
   const useMeniscus = presentationMode === 'meniscus'
   const useLensSignature = !useMeniscus
 
-  const liquidHue = useMeniscus
-    ? entertainmentRipple
-      ? '#F0A030'
-      : cat.color
-    : signatureHue
-  const liquidGlow = useMeniscus ? cat.glow : signatureGlow
+  const liquidHue = signatureHue
+  const liquidGlow = signatureGlow
   const horizonHue = dr.color
 
-  const showBoard = useMeniscus
-    ? (expanding && pourProgress >= POUR_BOARD_START) || (focus && !expanding)
-    : focus && !expanding
-  const showPourOverlay = useMeniscus && expanded && pourProgress < 0.99
-  const hideHeaderLiquid = useMeniscus && expanding && pourProgress > 0.04
+  const showBoard = useMeniscus ? expanded : focus && !expanding
+  const showPourOverlay = !useMeniscus && expanded && pourProgress < 0.99
   const boardFade = useMeniscus
-    ? Math.min(1, Math.max(0, (pourProgress - POUR_BOARD_START) / (1 - POUR_BOARD_START)))
+    ? expanding
+      ? Math.min(1, pourProgress * 1.8)
+      : 1
     : 1
 
   let signatureState = 'ambient'
@@ -166,7 +160,8 @@ export default function Capsule() {
   const showSplitTrailing =
     useLensSignature && (connected || peek) && signatureState !== 'minimal'
   const showSplitLeading = peek || peekPlus || (inFocus && warning) || (!connected && peek)
-  const showMeniscusText = useMeniscus && (peek || peekPlus || (inFocus && warning) || (!connected && peek))
+  const showMeniscusPeek = useMeniscus && !expanded && (peek || peekPlus) && !focus && !flowActive
+  const dewW = MENISCUS_DEW_W
 
   const compactW = useMemo(
     () =>
@@ -195,18 +190,6 @@ export default function Capsule() {
   )
 
   const contentWidth = expanded ? EXPANDED_W - DRAG_W - CLOSE_W : compactW - DRAG_W
-
-  const meniscusLiquidW = useMemo(() => {
-    if (!useMeniscus || expanded) return contentWidth
-    if (signatureState === 'minimal') return 24
-    if (peekPlus) return MENISCUS_LIQUID_PEEK_PLUS
-    if (peek) return MENISCUS_LIQUID_PEEK
-    if (hovering) return MENISCUS_LIQUID_HOVER
-    return MENISCUS_LIQUID_AMBIENT
-  }, [useMeniscus, expanded, contentWidth, signatureState, peekPlus, peek, hovering])
-
-  const wetStretch =
-    useMeniscus && !expanded ? (peekPlus ? 16 : peek ? 10 : hovering ? 6 : 0) : 0
 
   useEffect(() => {
     if (!capsulePulse) return
@@ -240,10 +223,10 @@ export default function Capsule() {
     playConfirm()
     setPourProgress(0)
     setExpanding(true)
+    setFocus(true)
     const ms = presentationMode === 'meniscus' ? POUR_DURATION_MS : FOCUS_MA_MS
     focusTimer.current = setTimeout(() => {
       setExpanding(false)
-      setFocus(true)
       setPourProgress(1)
     }, ms)
   }, [presentationMode])
@@ -259,7 +242,7 @@ export default function Capsule() {
   }, [clearTimers, anchorPos.screenX, anchorPos.screenY, compactW])
 
   const handleEnter = () => {
-    if (focus) return
+    if (focus || flowActive) return
     setHovering(true)
     clearTimeout(peekTimer.current)
     clearTimeout(peekPlusTimer.current)
@@ -278,7 +261,7 @@ export default function Capsule() {
   }
 
   const handleMeniscusPointerMove = (e) => {
-    if (!useMeniscus || expanded || focus) return
+    if (!useMeniscus || expanded || focus || flowActive) return
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - rect.left
     setPointerBias(Math.max(-1, Math.min(1, (x / Math.max(rect.width, 1)) * 2 - 1)))
@@ -316,9 +299,16 @@ export default function Capsule() {
   }, [expanding, presentationMode])
 
   useEffect(() => {
+    if (expanded || !useMeniscus) return
+    const extra = showMeniscusPeek ? (peekPlus ? 132 : 96) : 0
+    fitCompact(compactW + extra)
+  }, [expanded, useMeniscus, showMeniscusPeek, peekPlus, compactW, fitCompact])
+
+  useEffect(() => {
     if (expanded) return
+    if (useMeniscus && (peek || peekPlus)) return
     fitCompact(compactW)
-  }, [expanded, compactW, fitCompact])
+  }, [expanded, compactW, fitCompact, useMeniscus, peek, peekPlus])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -418,86 +408,6 @@ export default function Capsule() {
     )
   }
 
-  const renderCompactPill = () => {
-    if (!showMeniscusText) return null
-
-    if (!connected && peekPlus) {
-      return (
-        <span className="flex items-center gap-1 whitespace-nowrap text-[11px] text-txt-muted/60">
-          示例 · 编程 · 2h14m
-        </span>
-      )
-    }
-    if (!connected && peek) {
-      return <span className="text-[11px] text-txt-muted">未连接</span>
-    }
-    if (inFocus && warning) {
-      return (
-        <span className="truncate text-[11px] text-txt-primary tnum">
-          {label} · {timeText}
-          <span className="text-[#F59E0B]"> · 有点偏航</span>
-        </span>
-      )
-    }
-
-    if (flowActive && peek && !peekPlus && connected) {
-      return (
-        <span className="truncate font-mono text-[11px] tracking-tight text-txt-primary tnum">
-          已入流 · {timeText}
-        </span>
-      )
-    }
-
-    if (peek && !peekPlus) {
-      return (
-        <span className="truncate font-mono text-[11px] tracking-tight text-txt-primary tnum">
-          {label} · {timeText}
-        </span>
-      )
-    }
-
-    const showCat = peek || peekPlus
-    const showPlus = peekPlus && connected
-
-    return (
-      <>
-        <motion.span
-          className="overflow-hidden whitespace-nowrap text-[11px] text-txt-secondary"
-          animate={{
-            maxWidth: showCat ? 88 : 0,
-            opacity: showCat ? 1 : 0,
-            marginRight: showCat ? 2 : 0,
-          }}
-          transition={peekEase}
-        >
-          {label}
-          {showCat ? ' · ' : ''}
-        </motion.span>
-        {showPlus ? (
-          <motion.span
-            className="overflow-hidden whitespace-nowrap text-[11px] text-txt-secondary"
-            initial={{ opacity: 0, maxWidth: 0 }}
-            animate={{ opacity: 1, maxWidth: 72, marginRight: 2 }}
-            transition={peekEase}
-          >
-            {appShort} ·{' '}
-          </motion.span>
-        ) : null}
-        {showPlus && sessionMins > 0 ? (
-          <motion.span
-            className="overflow-hidden whitespace-nowrap text-[11px] text-txt-muted tnum"
-            initial={{ opacity: 0, maxWidth: 0 }}
-            animate={{ opacity: 1, maxWidth: 48, marginRight: 2 }}
-            transition={peekEase}
-          >
-            {sessionMins}min ·{' '}
-          </motion.span>
-        ) : null}
-        <span className="text-[11px] font-medium text-txt-primary tnum">{timeText}</span>
-      </>
-    )
-  }
-
   const expandedTitle = inPomodoro
     ? pomodoro.intent || (inBreak ? '休息' : '专注')
     : currentActivity?.app?.replace(/\.exe$/i, '') || label
@@ -529,8 +439,8 @@ export default function Capsule() {
         animate={{
           width: expanded ? EXPANDED_W : compactW,
           height: expanded ? EXPANDED_H : PILL_H,
-          borderRadius: expanded ? 16 : 999,
-          scale: capsulePulse ? [1, 1.05, 0.98, 1] : hovering && !expanded ? 1.02 : 1,
+          borderRadius: expanded ? 16 : useMeniscus ? 0 : 999,
+          scale: capsulePulse ? [1, 1.05, 0.98, 1] : 1,
           opacity:
             useMeniscus && signatureState === 'minimal' && !expanded
               ? 0.24
@@ -538,37 +448,28 @@ export default function Capsule() {
                 ? 0.28
                 : 1,
         }}
-        className={`relative flex flex-col overflow-hidden border backdrop-blur-[24px] backdrop-saturate-150 ${edgeShimmer ? 'edge-shimmer' : ''} ${useMeniscus && !expanded ? 'meniscus-vessel' : ''}`}
+        className={`relative flex flex-col backdrop-blur-[24px] backdrop-saturate-150 ${edgeShimmer ? 'edge-shimmer' : ''} ${
+          useMeniscus && !expanded ? 'meniscus-dock overflow-visible border-0 bg-transparent shadow-none backdrop-blur-none' : 'overflow-hidden border'
+        } ${useMeniscus && !expanded ? '' : ''}`}
         style={{
           background: useMeniscus && !expanded
-            ? 'rgba(10,10,16,0.42)'
+            ? 'transparent'
             : expanded
               ? 'rgba(10,10,16,0.94)'
               : 'rgba(10,10,16,0.55)',
           borderColor: useMeniscus && !expanded
-            ? 'rgba(255,255,255,0.11)'
+            ? 'transparent'
             : expanded
               ? 'rgba(255,255,255,0.10)'
               : 'rgba(255,255,255,0.08)',
-          boxShadow: expanded
-            ? `0 0 0 1px rgba(255,255,255,0.05), 0 16px 40px rgba(0,0,0,0.55), 0 0 16px ${useMeniscus ? liquidGlow : signatureGlow}`
-            : useMeniscus
-              ? `0 0 0 1px rgba(255,255,255,0.06), 0 6px 20px ${liquidGlow.replace(/[\d.]+\)$/, '0.18)')}, 0 2px 8px rgba(0,0,0,0.25)`
+          boxShadow: useMeniscus && !expanded
+            ? 'none'
+            : expanded
+              ? `0 0 0 1px rgba(255,255,255,0.05), 0 16px 40px rgba(0,0,0,0.55), 0 0 16px ${useMeniscus ? liquidGlow : signatureGlow}`
               : `0 0 0 1px rgba(255,255,255,0.04), 0 0 10px ${useMeniscus ? liquidGlow : signatureGlow}`,
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Meniscus horizon — dead reckoning climate (dual-channel) */}
-        {useMeniscus ? (
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 z-[26] h-px"
-            style={{
-              background: `linear-gradient(90deg, transparent 4%, ${horizonHue} 50%, transparent 96%)`,
-              opacity: expanded ? (showPourOverlay ? 0.65 : 0.48) : hovering ? 0.42 : 0.35,
-            }}
-          />
-        ) : null}
-
         {useLensSignature ? (
           <div
             className="pointer-events-none absolute inset-x-0 top-0 z-[25] h-px"
@@ -623,70 +524,79 @@ export default function Capsule() {
 
           {useMeniscus ? (
             <div
-              className="relative min-w-0 flex-1"
-              style={{ width: contentWidth }}
+              className={`no-drag relative flex min-w-0 flex-1 items-center ${expanded ? 'justify-center' : ''}`}
+              style={{ width: expanded ? contentWidth : dewW }}
               onMouseMove={handleMeniscusPointerMove}
               onMouseLeave={() => setPointerBias(0)}
             >
-              {!hideHeaderLiquid ? (
-                <motion.div
-                  className="absolute left-0 top-0 h-full overflow-hidden"
-                  initial={false}
-                  animate={{ width: meniscusLiquidW, opacity: hovering && !peek ? 1.06 : 1 }}
-                  transition={wetEase}
-                >
-                  <MeniscusVessel
-                    width={meniscusLiquidW}
-                    height={PILL_H}
-                    fillPct={fillPct}
-                    hue={liquidHue}
-                    horizonHue={horizonHue}
-                    glow={liquidGlow}
-                    visualState={signatureState}
-                    warning={warning}
-                    entertainment={entertainmentRipple}
-                    flow={flowActive && !expanded}
-                    hovered={hovering && signatureState === 'ambient'}
-                    wetBias={pointerBias}
-                    wetStretch={wetStretch}
-                    gradientId={expanded ? 'meniscus-expanded' : 'meniscus-compact'}
-                  />
-                </motion.div>
-              ) : null}
-              {!expanded ? (
-                <>
+              <div className="relative shrink-0" style={{ width: dewW, height: PILL_H }}>
+                <MeniscusVessel
+                  width={dewW}
+                  height={PILL_H}
+                  fillPct={fillPct}
+                  hue={liquidHue}
+                  horizonHue={horizonHue}
+                  glow={liquidGlow}
+                  visualState={expanded ? 'focus' : signatureState}
+                  categoryKey={cat.key}
+                  productiveSeconds={todayTotals.productiveSeconds || 0}
+                  sessionSeconds={sessionSeconds}
+                  warning={warning}
+                  entertainment={entertainmentRipple}
+                  flow={flowActive && !expanded}
+                  hovered={hovering && signatureState === 'ambient' && !expanded}
+                  peek={peek && !peekPlus}
+                  peekPlus={peekPlus}
+                  wetBias={pointerBias}
+                  gradientId={expanded ? 'meniscus-expanded' : 'meniscus-compact'}
+                />
+                {!expanded && !flowActive ? (
                   <button
                     type="button"
                     onClick={handleDotClick}
-                    className="no-drag absolute left-0 top-0 z-10 h-full w-[28px]"
+                    className="no-drag absolute z-20 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+                    style={{ left: '61.8%', top: '42%' }}
                     title={connected ? '单击开始番茄' : 'ActivityWatch 未连接'}
                     aria-label="开始番茄"
                   />
-                  <button
-                    type="button"
-                    onClick={handlePillClick}
-                    className="no-drag absolute inset-0 z-10 flex items-center overflow-hidden pl-7 pr-2 text-left"
-                    title={connected ? '单击展开' : '查看连接状态'}
-                  >
-                    <motion.span
-                      className="meniscus-surface-text ml-auto flex min-w-0 items-center overflow-hidden whitespace-nowrap"
-                      initial={false}
-                      animate={{
-                        y: showMeniscusText ? 0 : 9,
-                        opacity: showMeniscusText ? 1 : 0,
-                        filter: showMeniscusText ? 'blur(0px)' : 'blur(4px)',
-                      }}
-                      transition={{ ...surfaceEase, delay: showMeniscusText ? 0.2 : 0 }}
-                    >
-                      {renderCompactPill()}
-                    </motion.span>
-                  </button>
-                </>
-              ) : (
-                <div className="pointer-events-none absolute inset-0 z-10 flex items-center px-2.5 pl-8">
-                  <span className="truncate text-[11px] text-txt-secondary">{expandedTitle}</span>
-                </div>
-              )}
+                ) : null}
+                <button
+                  type="button"
+                  onClick={expanded ? closeFocus : handlePillClick}
+                  className="no-drag absolute inset-0 z-10 rounded-[18px]"
+                  title={expanded ? '单击收起' : connected ? '单击展开' : '查看连接状态'}
+                  aria-label={expanded ? '收起' : '展开'}
+                />
+              </div>
+              {showMeniscusPeek ? (
+                <motion.div
+                  className={`meniscus-peek pointer-events-none absolute left-full top-1/2 z-30 flex h-[30px] -translate-y-1/2 items-center whitespace-nowrap rounded-[15px] border border-white/[0.1] bg-[rgba(18,18,28,0.82)] px-3 text-[12px] text-txt-primary ${peekPlus ? 'peek-plus' : ''}`}
+                  initial={{ opacity: 0, x: 8 }}
+                  animate={{ opacity: 1, x: 12 }}
+                  exit={{ opacity: 0, x: 8 }}
+                  transition={peekEase}
+                >
+                  {!connected && peekPlus ? (
+                    <span className="text-txt-muted/60">示例 · 编程 · 2h14m</span>
+                  ) : !connected && peek ? (
+                    <span className="text-txt-muted">未连接</span>
+                  ) : inFocus && warning ? (
+                    <span className="tnum">
+                      {label} · {sessionMins}m
+                      <span className="text-[#F59E0B]"> · 有点偏航</span>
+                    </span>
+                  ) : peekPlus ? (
+                    <>
+                      {label} · {sessionMins}m
+                      <span className="meniscus-peek-sub ml-2 text-[11px] text-txt-secondary">{appShort}</span>
+                    </>
+                  ) : (
+                    <span className="tnum">
+                      {label} · {sessionMins}m
+                    </span>
+                  )}
+                </motion.div>
+              ) : null}
             </div>
           ) : (
             <div className="relative flex min-w-0 shrink-0 items-center" style={{ width: contentWidth }}>
@@ -786,21 +696,48 @@ export default function Capsule() {
           ) : null}
         </div>
 
+        {useMeniscus && expanded ? (
+          <motion.div
+            className="pointer-events-none absolute z-[24] w-[3px] -translate-x-1/2 rounded-full"
+            style={{
+              left: DRAG_W + contentWidth / 2,
+              top: PILL_H - 1,
+              background: `linear-gradient(to bottom, color-mix(in srgb, ${liquidHue} 88%, transparent), transparent)`,
+            }}
+            initial={false}
+            animate={{
+              height: expanding ? 8 + pourProgress * 10 : 10,
+              opacity: expanding ? 0.35 + pourProgress * 0.4 : 0.55,
+            }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+          />
+        ) : null}
+
       <AnimatePresence initial={false}>
         {showBoard ? (
           <motion.div
             key="board-body"
-            initial={{ height: 0, opacity: 0, y: -8 }}
+            initial={{ height: 0, opacity: 0 }}
             animate={{
               height: EXPANDED_H - PILL_H,
               opacity: boardFade,
-              y: useMeniscus && expanding ? Math.max(0, 8 * (1 - boardFade)) : 0,
+              y: 0,
             }}
-            exit={{ height: 0, opacity: 0, y: -6, transition: { duration: 0.2, ease: 'easeIn' } }}
-            transition={useMeniscus && expanding ? { duration: 0.28, ease: 'easeOut' } : dropEase}
+            exit={{ height: 0, opacity: 0, transition: { duration: 0.28, ease: 'easeIn' } }}
+            transition={
+              useMeniscus && expanding
+                ? { duration: 0.55, ease: [0.32, 1.22, 0.46, 1] }
+                : dropEase
+            }
             className="no-drag relative z-[12] min-h-0 flex-1 overflow-hidden"
           >
-            {!connected ? <DisconnectedPanel /> : <BentoBoard embedded />}
+            {!connected ? (
+              <DisconnectedPanel />
+            ) : useMeniscus ? (
+              <FocusBoard open={boardFade > 0.12} />
+            ) : (
+              <BentoBoard embedded />
+            )}
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -838,7 +775,7 @@ export default function Capsule() {
 
   return (
     <div
-      className="relative"
+      className="relative overflow-visible"
       style={{ width: compactW, height: PILL_H }}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}

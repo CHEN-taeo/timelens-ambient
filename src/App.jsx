@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
 import Capsule from './components/Capsule.jsx'
+import MeniscusCapsule from './components/MeniscusCapsule.jsx'
 import { useTimeStore } from './store/useTimeStore.js'
 import { useSettingsStore } from './store/useSettingsStore.js'
-import { getCurrentActivity, getTodayTotals, getDayStrip, pingAW } from './store/awService.js'
+import { getCurrentActivity, getTodayTotals, getTodaySessions, getDayStrip, pingAW } from './store/awService.js'
 import { checkTemporalLandmark, playLandmark, setSoundsEnabled, soundsEnabled } from './utils/sounds.js'
 
 const POLL_ACTIVITY_MS = 5000
@@ -12,6 +13,7 @@ export default function App() {
   const setConnected = useTimeStore((s) => s.setConnected)
   const setCurrentActivity = useTimeStore((s) => s.setCurrentActivity)
   const setTodayTotals = useTimeStore((s) => s.setTodayTotals)
+  const setTodaySessions = useTimeStore((s) => s.setTodaySessions)
   const setDayStrip = useTimeStore((s) => s.setDayStrip)
   const tick = useTimeStore((s) => s.tick)
   const triggerEdgeShimmer = useTimeStore((s) => s.triggerEdgeShimmer)
@@ -51,10 +53,15 @@ export default function App() {
 
     async function pollTotals() {
       try {
-        const [totals, strip] = await Promise.all([getTodayTotals(), getDayStrip()])
+        const [totals, strip, sessions] = await Promise.all([
+          getTodayTotals(),
+          getDayStrip(),
+          getTodaySessions(),
+        ])
         if (cancelled) return
         setTodayTotals(totals)
         setDayStrip(strip)
+        setTodaySessions(sessions)
       } catch {
         /* keep last known totals on error */
       }
@@ -73,7 +80,7 @@ export default function App() {
       clearInterval(actTimer)
       clearInterval(totalsTimer)
     }
-  }, [setConnected, setCurrentActivity, setTodayTotals, setDayStrip])
+  }, [setConnected, setCurrentActivity, setTodayTotals, setTodaySessions, setDayStrip])
 
   // 1-second pomodoro tick.
   useEffect(() => {
@@ -89,5 +96,8 @@ export default function App() {
     }
   }, [triggerEdgeShimmer])
 
-  return <Capsule />
+  const presentationMode = useSettingsStore((s) => s.settings.presentationMode)
+  const useMeniscusDock = presentationMode === 'meniscus' || presentationMode === 'lens-ring'
+
+  return useMeniscusDock ? <MeniscusCapsule /> : <Capsule />
 }

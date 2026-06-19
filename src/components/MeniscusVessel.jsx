@@ -1,290 +1,348 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
-import { buildMeniscusPaths, beadPosition, hexToRgb } from '../utils/meniscusGeometry.js'
-import { resolveMeniscusPhysics, springFromPhysics } from '../utils/meniscusPhysics.js'
+import { useEffect, useId, useRef, useState } from 'react'
+import {
+  computeDewBarFrame,
+  DEW_H,
+  DEW_W,
+  productiveFillP,
+  tideFraction,
+} from '../utils/meniscusDewBar.js'
 
 /**
- * Meniscus — TimeLens signature form (optics + fluid physics).
- * fillPct = work-day progress · hue = category · tension bead = ●
- *
- * @param {'minimal'|'ambient'|'peek'|'focus'|'settle'} visualState
+ * 横露珠 — 与 docs/prototype/lens-dew-bar.js 同构 SVG
  */
 export default function MeniscusVessel({
-  width,
-  height,
+  width = DEW_W,
+  height = DEW_H,
   fillPct = 50,
-  hue = '#4A7CFF',
+  hue = '#818CF8',
   horizonHue,
-  glow = 'rgba(74,124,255,0.38)',
+  glow = 'rgba(129,140,248,0.4)',
   visualState = 'ambient',
+  categoryKey = 'coding',
+  productiveSeconds = 0,
+  sessionSeconds = 0,
   warning = false,
   entertainment = false,
   flow = false,
   hovered = false,
+  peek = false,
+  peekPlus = false,
   wetBias = 0,
-  wetStretch = 0,
-  gradientId = 'meniscus-liquid',
+  steady = 0.82,
+  gradientId: gradientIdProp,
+  onBeadClick,
 }) {
-  const [ripple, setRipple] = useState(0)
-  const [noisePhase, setNoisePhase] = useState(0)
-  const hoverRippleRef = useRef(0)
-  const rafRef = useRef(null)
+  const reactId = useId().replace(/:/g, '')
+  const gradientId = gradientIdProp || `dew-${reactId}`
 
-  const physics = useMemo(
-    () =>
-      resolveMeniscusPhysics({
-        visualState,
-        flow,
-        warning,
-        entertainment,
-        hovered,
-      }),
-    [visualState, flow, warning, entertainment, hovered]
+  const phaseRef = useRef(0)
+  const wetBiasRef = useRef(wetBias)
+  const breathRef = useRef(0)
+  const crystalRef = useRef(0)
+  const cryOnRef = useRef(false)
+  const settleRef = useRef({ mode: 'none', t: 0, evap: 0 })
+  const prevEntertainment = useRef(false)
+
+  const [frame, setFrame] = useState(() =>
+    computeDewBarFrame({ width, height, hue, catKey: categoryKey })
   )
 
-  const liquidSpring = useMemo(() => springFromPhysics(physics), [physics])
+  const isSettle = visualState === 'settle'
+  const isMinimal = visualState === 'minimal' && width < 64
+  const isFocus = visualState === 'focus'
 
   useEffect(() => {
-    let frame = 0
+    if (entertainment && !prevEntertainment.current) {
+      cryOnRef.current = true
+      crystalRef.current = 0.001
+    }
+    prevEntertainment.current = entertainment
+  }, [entertainment])
+
+  useEffect(() => {
+    if (isSettle) {
+      settleRef.current = { mode: 'evaporating', t: 0, evap: productiveFillP(productiveSeconds) }
+    } else {
+      settleRef.current = { mode: 'none', t: 0, evap: 0 }
+    }
+  }, [isSettle, productiveSeconds])
+
+  useEffect(() => {
+    wetBiasRef.current = wetBias
+  }, [wetBias])
+
+  useEffect(() => {
+    let raf
     let last = performance.now()
 
-    const tick = (now) => {
-      const dt = Math.min(0.05, (now - last) / 1000)
-      last = now
-      frame += dt * 60
+    const tick = (nowMs) => {
+      const dt = Math.min(0.05, (nowMs - last) / 1000)
+      last = nowMs
+      phaseRef.current += dt
 
-      if (physics.noise) {
-        setNoisePhase((p) => p + dt * (physics.rippleHz || 0.85) * 9)
+      if (breathRef.current > 0) {
+        breathRef.current += dt / 2.2
+        if (breathRef.current >= 1) breathRef.current = 0
       }
 
-      const amp = physics.rippleAmp ?? 0
-      if (amp > 0) {
-        const wave = Math.sin(frame * (physics.rippleHz || 0.5) * 2.8) * amp
-        setRipple(wave + hoverRippleRef.current * 0.35)
-      } else if (hoverRippleRef.current > 0.01) {
-        hoverRippleRef.current *= 0.88
-        setRipple(hoverRippleRef.current)
-      } else {
-        setRipple(0)
+      if (cryOnRef.current) {
+        crystalRef.current += dt / 1.5
+        if (crystalRef.current >= 1) {
+          cryOnRef.current = false
+          crystalRef.current = 0
+        }
       }
 
-      rafRef.current = requestAnimationFrame(tick)
+      const settle = settleRef.current
+      if (settle.mode === 'evaporating') {
+        settle.t += dt / 3.8
+        if (settle.t >= 1) settle.mode = 'ended'
+      }
+
+      wetBiasRef.current += (wetBias - wetBiasRef.current) * Math.min(1, dt * (hovered ? 6 : 10))
+
+      let prox = 'ambient'
+      if (peekPlus) prox = 'peekPlus'
+      else if (peek) prox = 'peek'
+
+      const fillP = productiveFillP(productiveSeconds) || fillPct / 100
+
+      setFrame(
+        computeDewBarFrame({
+          width,
+          height,
+          hue,
+          catKey: categoryKey,
+          fillP,
+          tideP: tideFraction(new Date()),
+          steady,
+          flow,
+          focus: isFocus,
+          hover: hovered,
+          prox,
+          wetBias: wetBiasRef.current,
+          phase: phaseRef.current,
+          breath: breathRef.current,
+          settle: settle.mode,
+          settleT: settle.t,
+          evap: settle.evap,
+          cryOn: cryOnRef.current,
+          crystal: crystalRef.current,
+        })
+      )
+
+      raf = requestAnimationFrame(tick)
     }
 
-    rafRef.current = requestAnimationFrame(tick)
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
-  }, [physics])
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [
+    width,
+    height,
+    hue,
+    categoryKey,
+    productiveSeconds,
+    sessionSeconds,
+    fillPct,
+    flow,
+    isFocus,
+    hovered,
+    peek,
+    peekPlus,
+    wetBias,
+    steady,
+    warning,
+  ])
 
-  useEffect(() => {
-    if (!hovered || physics.flat) return
-    hoverRippleRef.current = 1.1
-    const t = setTimeout(() => {
-      hoverRippleRef.current = 0
-    }, 420)
-    return () => clearTimeout(t)
-  }, [hovered, physics.flat])
+  const gid = gradientId
+  const clipId = `${gid}-clip`
+  const voyage = horizonHue || frame.voyage
 
-  const paths = useMemo(
-    () =>
-      buildMeniscusPaths({
-        width,
-        height,
-        fillPct,
-        ripple,
-        flat: physics.flat,
-        noise: physics.noise ? physics.rippleAmp : 0,
-        noisePhase,
-        wetBias,
-        wetStretch,
-      }),
-    [width, height, fillPct, ripple, physics, noisePhase, wetBias, wetStretch]
-  )
-
-  const isMinimal = visualState === 'minimal'
-  const isSettle = visualState === 'settle'
-  const isAmbientQuiet = visualState === 'ambient' && !hovered
-  const showLiquid = !isMinimal && !isSettle
-  const bead = beadPosition(fillPct, width)
-  const rgb = hexToRgb(hue)
-  const horizon = horizonHue || hue
-  const horizonRgb = hexToRgb(horizon)
-  const beadId = `${gradientId}-bead`
-  const causticsId = `${gradientId}-caustics`
-  const liquidDeepId = `${gradientId}-deep`
+  if (isMinimal) {
+    return (
+      <svg width={width} height={height} className="meniscus-dew-svg block" aria-hidden>
+        <circle
+          cx={width * 0.618}
+          cy={height * 0.45}
+          r={3}
+          fill={hue}
+          opacity={0.75}
+          style={{ filter: `drop-shadow(0 0 6px ${glow})` }}
+        />
+      </svg>
+    )
+  }
 
   return (
     <svg
       width={width}
       height={height}
-      className="pointer-events-none absolute inset-0"
+      className="meniscus-dew-svg block"
       aria-hidden
+      style={{ filter: isFocus ? 'drop-shadow(0 2px 12px rgba(0,0,0,0.35))' : undefined }}
     >
       <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop
-            offset="0"
-            stopColor={hue}
-            stopOpacity={isSettle ? 0.08 : isAmbientQuiet ? 0.32 : flow ? 0.42 : 0.48}
-          />
-          <stop
-            offset="0.55"
-            stopColor={hue}
-            stopOpacity={isSettle ? 0.06 : isAmbientQuiet ? 0.38 : flow ? 0.58 : 0.44}
-          />
-          <stop
-            offset="1"
-            stopColor={hue}
-            stopOpacity={isSettle ? 0.04 : isAmbientQuiet ? 0.46 : flow ? 0.78 : 0.52}
-          />
+        <clipPath id={clipId}>
+          <path d={frame.shell} />
+        </clipPath>
+        <linearGradient id={`${gid}-glass`} x1="6%" y1="0%" x2="94%" y2="100%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.16)" />
+          <stop offset="38%" stopColor="rgba(255,255,255,0.03)" />
+          <stop offset="100%" stopColor="rgba(0,0,0,0.22)" />
         </linearGradient>
-
-        <linearGradient id={liquidDeepId} x1="0" y1="0" x2="0" y2="1">
+        <radialGradient id={`${gid}-fresnel`} cx="24%" cy="22%" r="62%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.2)" />
+          <stop offset="48%" stopColor="rgba(255,255,255,0.05)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+        </radialGradient>
+        <linearGradient id={`${gid}-specGrad`} gradientUnits="userSpaceOnUse" x1="0" y1="0" x2={width} y2="0">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.7)" />
+          <stop offset="38%" stopColor="rgba(255,255,255,0.38)" />
+          <stop offset="72%" stopColor="rgba(255,255,255,0.12)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,0.04)" />
+        </linearGradient>
+        <linearGradient id={`${gid}-rim`} x1="4%" y1="0%" x2="96%" y2="100%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.42)" />
+          <stop offset="55%" stopColor="rgba(255,255,255,0.1)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,0.06)" />
+        </linearGradient>
+        <linearGradient id={`${gid}-liq`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={hue} stopOpacity={frame.op} />
+          <stop offset="0.45" stopColor={hue} stopOpacity={frame.op} />
+          <stop offset="1" stopColor={hue} stopOpacity={Math.min(1, frame.op + 0.06)} />
+        </linearGradient>
+        <linearGradient id={`${gid}-liqDeep`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={hue} stopOpacity="0" />
-          <stop offset="1" stopColor={hue} stopOpacity={flow ? 0.35 : 0.22} />
+          <stop offset="1" stopColor={hue} stopOpacity={frame.liqDeepOpacity} />
         </linearGradient>
-
-        <radialGradient id={beadId} cx="35%" cy="30%" r="65%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
-          <stop offset="42%" stopColor="#ffffff" stopOpacity="0.82" />
-          <stop offset="100%" stopColor={hue} stopOpacity="0.15" />
+        <linearGradient id={`${gid}-poolWash`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={hue} stopOpacity={frame.poolWash.pw0} />
+          <stop offset="0.55" stopColor={hue} stopOpacity={frame.poolWash.pw1} />
+          <stop offset="1" stopColor={frame.poolWash.pw2Color} stopOpacity={frame.poolWash.pw2} />
+        </linearGradient>
+        <radialGradient id={`${gid}-beadG`} cx="34%" cy="28%" r="68%">
+          <stop offset="0%" stopColor="#fff" />
+          <stop offset="42%" stopColor="#fff" stopOpacity="0.92" />
+          <stop offset="100%" stopColor={hue} stopOpacity="0.5" />
         </radialGradient>
-
-        <radialGradient id={causticsId} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={hue} stopOpacity={flow ? 0.45 : 0.38} />
-          <stop offset="55%" stopColor={hue} stopOpacity="0.12" />
-          <stop offset="100%" stopColor={hue} stopOpacity="0" />
-        </radialGradient>
-
-        <filter id={`${gradientId}-caustic-blur`} x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="2.5" result="blur" />
-          <feColorMatrix
-            in="blur"
-            type="matrix"
-            values={`1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.65 0`}
-          />
+        <filter id={`${gid}-hzGlow`} x="-10%" y="-200%" width="120%" height="500%">
+          <feGaussianBlur stdDeviation="1.1" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id={`${gid}-glow`}>
+          <feGaussianBlur stdDeviation="2.2" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id={`${gid}-specSoft`}>
+          <feGaussianBlur stdDeviation="1.6" />
         </filter>
       </defs>
 
-      {/* Caustics — light pool under liquid */}
-      {showLiquid ? (
-        <motion.ellipse
-          cx={paths.causticsCx}
-          cy={paths.causticsCy}
-          rx={Math.max(12, paths.fillX * 0.38)}
-          ry={flow ? 3.5 : 5}
-          fill={`url(#${causticsId})`}
-          filter={`url(#${gradientId}-caustic-blur)`}
-          animate={{ cx: paths.causticsCx, rx: Math.max(12, paths.fillX * 0.38) }}
-          transition={liquidSpring}
-          opacity={flow ? 0.55 : 0.72}
+      <path d={frame.shell} fill={frame.shellTint} opacity={frame.shellOpacity} />
+
+      <g clipPath={`url(#${clipId})`}>
+        {frame.showLiquid ? (
+          <>
+            <rect x="0" y={frame.poolTop} width={width} height={frame.poolHeight} fill={`url(#${gid}-poolWash)`} />
+            <path d={frame.liquidPath} fill={`url(#${gid}-liqDeep)`} />
+            <path d={frame.liquidPath} fill={`url(#${gid}-liq)`} />
+            {!isFocus ? (
+              <line
+                x1="5"
+                y1={frame.tideY}
+                x2={width - 5}
+                y2={frame.tideY}
+                stroke={frame.ghostStroke}
+                strokeWidth="1.15"
+                strokeDasharray="4 3"
+                opacity={frame.ghostOpacity}
+              />
+            ) : null}
+            <line
+              x1="5"
+              y1={frame.baseY}
+              x2={width - 5}
+              y2={frame.baseY}
+              stroke={voyage}
+              strokeWidth="1.35"
+              opacity={frame.hzOpacity}
+              filter={`url(#${gid}-hzGlow)`}
+            />
+            <path
+              d={frame.surfaceLine}
+              fill="none"
+              stroke="rgba(255,255,255,0.28)"
+              strokeWidth={isFocus ? 2.65 : 2.4}
+              filter={`url(#${gid}-specSoft)`}
+              opacity={isFocus ? Math.min(1, frame.specSoftOpacity + 0.18) : frame.specSoftOpacity}
+            />
+            <path
+              d={frame.surfaceLine}
+              fill="none"
+              stroke={`url(#${gid}-specGrad)`}
+              strokeWidth={isFocus ? 1.2 : 1.05}
+              strokeLinecap="round"
+              opacity={isFocus ? Math.min(1, frame.specOpacity + 0.1) : frame.specOpacity}
+            />
+          </>
+        ) : null}
+      </g>
+
+      <path d={frame.shell} fill={`url(#${gid}-glass)`} pointerEvents="none" />
+      <ellipse
+        cx={frame.fresnelCx}
+        cy={frame.fresnelCy}
+        rx={frame.fresnelRx}
+        ry={frame.fresnelRy}
+        fill={`url(#${gid}-fresnel)`}
+        pointerEvents="none"
+        clipPath={`url(#${clipId})`}
+        opacity={frame.fresnelOpacity}
+      />
+      <path d={frame.shell} fill="none" stroke={`url(#${gid}-rim)`} strokeWidth="1.05" pointerEvents="none" />
+
+      {frame.showLiquid && frame.beadVisible ? (
+        <circle
+          cx={frame.beadCx}
+          cy={frame.beadCy}
+          r="3.3"
+          fill={`url(#${gid}-beadG)`}
+          opacity={frame.beadOpacity}
+          style={{ filter: `url(#${gid}-glow) ${frame.beadGlow}` }}
+          pointerEvents="none"
         />
       ) : null}
 
-      {/* Vessel floor refraction line */}
-      <line
-        x1={0}
-        y1={height - 0.5}
-        x2={width}
-        y2={height - 0.5}
-        stroke={`rgba(${rgb.r},${rgb.g},${rgb.b},0.18)`}
-        strokeWidth={1}
-      />
-
-      {/* Horizon — dead reckoning day climate (dual-channel color) */}
-      <line
-        x1={0}
-        y1={1}
-        x2={width}
-        y2={1}
-        stroke={horizon}
-        strokeWidth={1}
-        opacity={isSettle ? 0.18 : hovered ? 0.42 : 0.35}
-      />
-
-      {showLiquid ? (
-        <g opacity={isAmbientQuiet ? 0.92 : 1}>
-          <motion.path
-            fill={`url(#${gradientId})`}
-            animate={{ d: paths.bodyPath }}
-            transition={liquidSpring}
-            style={{
-              filter: `drop-shadow(0 3px 8px rgba(${rgb.r},${rgb.g},${rgb.b},${flow ? 0.28 : 0.22}))`,
-            }}
-          />
-          {/* Deep liquid body tint */}
-          <motion.path
-            fill={`url(#${liquidDeepId})`}
-            animate={{ d: paths.bodyPath }}
-            transition={liquidSpring}
-            opacity={0.55}
-          />
-          {/* Meniscus specular highlight */}
-          <motion.path
-            fill="none"
-            stroke="rgba(255,255,255,0.38)"
-            strokeWidth={warning ? 1.2 : 1}
-            animate={{ d: paths.specularPath }}
-            transition={liquidSpring}
-            opacity={isAmbientQuiet ? 0.55 : flow ? 0.55 : 0.85}
-          />
-          {/* Tension bead — asymmetric droplet */}
-          <motion.circle
-            r={flow ? 2.2 : warning ? 2.8 : 2.6}
-            fill={`url(#${beadId})`}
-            animate={{
-              cx: paths.highlightX,
-              cy: paths.highlightY,
-              opacity: warning ? [0.65, 1, 0.65] : flow ? [0.45, 0.62, 0.45] : [0.8, 1, 0.8],
-            }}
-            transition={{
-              cx: liquidSpring,
-              cy: liquidSpring,
-              opacity: {
-                duration: warning ? 0.65 : flow ? 5.5 : 2.6,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              },
-            }}
-            style={{
-              filter: `drop-shadow(0 0 4px ${glow}) drop-shadow(-1px -1px 0 rgba(255,255,255,0.35))`,
-            }}
-          />
-        </g>
-      ) : null}
-
-      {isMinimal ? (
-        <motion.circle
-          cx={bead.cx}
-          cy={bead.cy}
-          r={3}
-          fill={`url(#${beadId})`}
-          animate={{ opacity: [0.5, 0.88, 0.5], scale: [1, 1.03, 1] }}
-          transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
-          style={{ filter: `drop-shadow(0 0 6px ${glow})` }}
+      {onBeadClick && frame.showLiquid && frame.beadVisible ? (
+        <circle
+          cx={frame.beadCx}
+          cy={frame.beadCy}
+          r="9"
+          fill="transparent"
+          className="meniscus-bead-hit"
+          style={{ cursor: 'pointer', pointerEvents: 'all' }}
+          onClick={(e) => {
+            e.stopPropagation()
+            cryOnRef.current = true
+            crystalRef.current = 0.001
+            onBeadClick(e)
+          }}
         />
       ) : null}
 
-      {isSettle ? (
-        <>
-          <line
-            x1={width * 0.08}
-            y1={height * 0.48}
-            x2={width * 0.92}
-            y2={height * 0.48}
-            stroke={`rgba(${horizonRgb.r},${horizonRgb.g},${horizonRgb.b},0.22)`}
-            strokeWidth={1}
-          />
-          <circle
-            cx={width * 0.88}
-            cy={height * 0.48}
-            r={2.5}
-            fill={horizon}
-            opacity={0.85}
-            style={{ filter: `drop-shadow(0 0 6px ${glow})` }}
-          />
-        </>
+      {frame.crystalOpacity > 0 ? (
+        <polygon
+          points={frame.crystalPoints}
+          fill={frame.crystalFill}
+          opacity={frame.crystalOpacity}
+          pointerEvents="none"
+        />
       ) : null}
     </svg>
   )
