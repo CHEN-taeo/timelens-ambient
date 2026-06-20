@@ -1,18 +1,32 @@
 # TimeLens Ambient — Full Project Context
 
-> **Purpose of this document:** Give any AI assistant (Claude, Cursor Agent, etc.) complete, accurate context about the product, design, architecture, and current state. Read this before changing UI, interaction, copy, or features.
+> **Purpose of this document:** Give any AI assistant complete, accurate context about the product, design, architecture, and current state. Read this before changing UI, interaction, copy, or features.
 >
-> **Owner:** College student (CHEN-taeo). Assume limited prior context; explain non-obviously. Silence ≠ understanding.
+> **Owner:** College student (CHEN-taeo). Assume limited prior context; explain non-obviously.
 >
 > **Repo:** https://github.com/CHEN-taeo/timelens-ambient  
-> **Version:** 0.1.0 (MVP / Stage 1)  
-> **Last updated:** 2026-06-16
+> **Version:** 0.2.0 (Thread Field MVP)  
+> **Last updated:** 2026-06-20
+
+---
+
+## 0. Thread Field（当前默认身份 — 2026-06）
+
+**丝场 Thread Field** 取代 Meniscus 为 App 默认 UI。详见 **`docs/THREAD_FIELD.md`**。
+
+| 项 | 说明 |
+|----|------|
+| 视觉 | 3–5 根短丝，φ 定标，顶中常驻，无水瓶/圆点 |
+| 状态 | Drift / Scatter / Tangle / Untangle / Align |
+| Fix | `Ctrl+Shift+U` → 缝内 coach → 剪贴板 XML → Glass Agent |
+| Coach | 内嵌 `coach/` + Electron `coach:run`，`.env` 配 `DEEPSEEK_API_KEY` |
+| Legacy | Meniscus/Capsule/Bento 仍在代码库，**App.jsx 不再挂载** |
 
 ---
 
 ## 1. One-sentence summary
 
-**TimeLens Ambient** is a local-only, always-on **desktop time mirror** — a small glass capsule on screen that reads ActivityWatch, classifies what you are doing, and quietly reflects it back (Meniscus liquid UI + optional Pomodoro), without feeling like a tracker app or dashboard.
+**TimeLens Ambient** is a local-only, always-on **desktop time mirror** — a small **thread bundle** on screen that reads ActivityWatch, reflects what you are doing through thread physics, and embeds a **fix coach** when Cursor Agent goes wrong — without feeling like a tracker app or dashboard.
 
 ---
 

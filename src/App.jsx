@@ -1,15 +1,21 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import Capsule from './components/Capsule.jsx'
 import MeniscusCapsule from './components/MeniscusCapsule.jsx'
+import ThreadField from './components/ThreadField.jsx'
 import { useTimeStore } from './store/useTimeStore.js'
 import { useSettingsStore } from './store/useSettingsStore.js'
 import { getCurrentActivity, getTodayTotals, getTodaySessions, getDayStrip, pingAW } from './store/awService.js'
-import { checkTemporalLandmark, playLandmark, setSoundsEnabled, soundsEnabled } from './utils/sounds.js'
+import { checkTemporalLandmark, playLandmark, setSoundsEnabled } from './utils/sounds.js'
+import { useThreadStore } from './store/useThreadStore.js'
 
 const POLL_ACTIVITY_MS = 5000
 const POLL_TOTALS_MS = 30000
 
 export default function App() {
+  const presentationMode = useSettingsStore((s) => s.settings.presentationMode)
+  const isThread = presentationMode === 'thread'
+  const useMeniscusDock = presentationMode === 'meniscus' || presentationMode === 'lens-ring'
+
   const setConnected = useTimeStore((s) => s.setConnected)
   const setCurrentActivity = useTimeStore((s) => s.setCurrentActivity)
   const setTodayTotals = useTimeStore((s) => s.setTodayTotals)
@@ -18,13 +24,10 @@ export default function App() {
   const tick = useTimeStore((s) => s.tick)
   const triggerEdgeShimmer = useTimeStore((s) => s.triggerEdgeShimmer)
 
-  const totalsCounter = useRef(0)
-
   useEffect(() => {
     useSettingsStore.getState().hydrate()
   }, [])
 
-  // Sync sound toggle from tray menu → localStorage
   useEffect(() => {
     if (!window.timelens?.onSoundToggled) return
     window.timelens.getSoundEnabled().then((enabled) => {
@@ -35,6 +38,28 @@ export default function App() {
     })
     return unsub
   }, [])
+
+  useEffect(() => {
+    if (isThread) return
+    window.timelens?.setMousePassthrough?.(false)
+  }, [isThread])
+
+  useEffect(() => {
+    if (!window.timelens) {
+      document.documentElement.classList.add('browser-preview')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isThread) return
+    const setVisibility = useThreadStore.getState().setVisibility
+    const onVis = () => {
+      setVisibility(document.hidden ? 'ghost' : 'breath')
+    }
+    onVis()
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [isThread])
 
   useEffect(() => {
     let cancelled = false
@@ -67,7 +92,6 @@ export default function App() {
       }
     }
 
-    // Initial connectivity check + first loads.
     pingAW().then((ok) => setConnected(ok))
     pollActivity()
     pollTotals()
@@ -82,13 +106,11 @@ export default function App() {
     }
   }, [setConnected, setCurrentActivity, setTodayTotals, setTodaySessions, setDayStrip])
 
-  // 1-second pomodoro tick.
   useEffect(() => {
     const t = setInterval(() => tick(), 1000)
     return () => clearInterval(t)
   }, [tick])
 
-  // Temporal landmark — one quiet pulse at fresh-start markers (Milkman et al.).
   useEffect(() => {
     if (checkTemporalLandmark()) {
       triggerEdgeShimmer()
@@ -96,8 +118,13 @@ export default function App() {
     }
   }, [triggerEdgeShimmer])
 
-  const presentationMode = useSettingsStore((s) => s.settings.presentationMode)
-  const useMeniscusDock = presentationMode === 'meniscus' || presentationMode === 'lens-ring'
+  if (isThread) {
+    return <ThreadField />
+  }
 
-  return useMeniscusDock ? <MeniscusCapsule /> : <Capsule />
+  if (useMeniscusDock) {
+    return <MeniscusCapsule />
+  }
+
+  return <Capsule />
 }

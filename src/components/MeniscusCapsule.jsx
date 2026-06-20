@@ -22,6 +22,17 @@ function shortApp(app = '') {
   return base.length > 14 ? `${base.slice(0, 12)}…` : base
 }
 
+function fmtProd(seconds = 0) {
+  const s = Math.max(0, Math.round(seconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (h > 0) return `${h}h${String(m).padStart(2, '0')}m`
+  return `${m}m`
+}
+
+/** 紧凑态 ●+时间 条宽度（px） */
+const AMBIENT_CHIP_W = 44
+
 export default function MeniscusCapsule() {
   const [peek, setPeek] = useState(false)
   const [peekPlus, setPeekPlus] = useState(false)
@@ -123,6 +134,24 @@ export default function MeniscusCapsule() {
     [shellW, dockH, dragW, dewW]
   )
 
+  const compactShellW =
+    shellW + (!expanded && !peek && !flowActive ? AMBIENT_CHIP_W : 0)
+  const compactWindowW =
+    compactShellW + (peekPlus ? peekPlusExtra : peek ? peekExtra : 0)
+
+  useEffect(() => {
+    window.timelens?.setMousePassthrough?.(false)
+  }, [])
+
+  useEffect(() => {
+    if (!window.timelens?.fitWindow) return
+    if (expanded) return
+    fitCompact(compactWindowW)
+    window.timelens.getAnchor?.().then((next) => {
+      if (next) setAnchorPos(next)
+    }).catch(() => {})
+  }, [dewW, dockH, expanded, fitCompact, compactWindowW])
+
   const openFocus = useCallback(() => {
     if (focus || pouring || closing || Date.now() < openGuardUntil.current) return
 
@@ -161,8 +190,9 @@ export default function MeniscusCapsule() {
 
     closeTimer.current = setTimeout(() => {
       setClosing(false)
-      window.timelens?.setWindowMode?.('compact', shellW, dockH, null, null, dragW, dewW)
-      window.timelens?.fitWindow?.(shellW, dockH, true, dragW, dewW)
+      const w = shellW + AMBIENT_CHIP_W
+      window.timelens?.setWindowMode?.('compact', w, dockH, null, null, dragW, dewW)
+      window.timelens?.fitWindow?.(w, dockH, true, dragW, dewW)
     }, MA.close)
   }, [focus, pouring, closing, clearPeekTimers, clearMaTimers, shellW, dockH, dragW, dewW])
 
@@ -251,20 +281,6 @@ export default function MeniscusCapsule() {
   }, [focus])
 
   useEffect(() => {
-    if (!window.timelens?.fitWindow) return
-    fitCompact(shellW)
-    window.timelens.getAnchor?.().then((next) => {
-      if (next) setAnchorPos(next)
-    }).catch(() => {})
-  }, [shellW, dockH, fitCompact])
-
-  useEffect(() => {
-    if (expanded) return
-    const peekW = peekPlus ? peekPlusExtra : peek ? peekExtra : 0
-    fitCompact(shellW + peekW)
-  }, [expanded, peek, peekPlus, shellW, peekExtra, peekPlusExtra, fitCompact])
-
-  useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape' && expanded) closeFocus()
       else if (e.key === 'Escape') clearToast()
@@ -326,7 +342,7 @@ export default function MeniscusCapsule() {
       style={
         expanded
           ? layoutVars
-          : { ...layoutVars, width: shellW, minWidth: shellW, height: dockH }
+          : { ...layoutVars, width: compactShellW, minWidth: compactShellW, height: dockH }
       }
     >
       {expanded ? (
@@ -339,7 +355,7 @@ export default function MeniscusCapsule() {
       ) : null}
 
       <div
-        className={`timelens-desktop ${expanded ? 'focus-mode is-overlay focus-mode--iceberg' : ''}`}
+        className={`timelens-desktop ${expanded ? 'focus-mode is-overlay focus-mode--iceberg' : 'timelens-desktop--compact'}`}
         style={
           expanded
             ? { top: layout.topMargin, width: expandedW, '--tl-lip-outer-w': `${lipOuterPx}px` }
@@ -349,76 +365,139 @@ export default function MeniscusCapsule() {
         onClick={(e) => e.stopPropagation()}
       >
         {!expanded ? (
-          <div className="meniscus-drag-strip drag" title="拖动" aria-hidden />
-        ) : null}
+          <>
+            <div className="meniscus-drag-strip drag" title="拖动" aria-hidden />
+            <div className="meniscus-compact-row no-drag">
+              <div
+                className="dock-slot"
+                style={{ width: dewW, height: dockH }}
+                onMouseEnter={handleEnter}
+                onMouseLeave={handleLeave}
+                onMouseMove={handlePointerMove}
+                onPointerUp={(e) => {
+                  if (e.target.closest('.meniscus-bead-hit')) return
+                  if (e.target.closest('.hit')) return
+                  openFocus()
+                }}
+              >
+                <MeniscusVessel
+                  width={dewW}
+                  height={dockH}
+                  fillPct={fillPct}
+                  hue={liquidHue}
+                  horizonHue={horizonHue}
+                  glow={liquidGlow}
+                  visualState={signatureState}
+                  categoryKey={cat.key}
+                  productiveSeconds={todayTotals.productiveSeconds || 0}
+                  sessionSeconds={sessionSeconds}
+                  warning={warning}
+                  entertainment={entertainmentRipple}
+                  flow={flowActive}
+                  hovered={hovering && signatureState === 'ambient'}
+                  peek={peek && !peekPlus}
+                  peekPlus={peekPlus}
+                  wetBias={pointerBias}
+                  steady={0.82}
+                  gradientId="meniscus-compact"
+                  onBeadClick={handleCrystal}
+                />
+                <button
+                  type="button"
+                  className="hit"
+                  onPointerDown={handleHitPointerDown}
+                  onClick={handleHitClick}
+                  aria-label="展开"
+                />
+                <div className={`peek ${peek ? 'show' : ''} ${peekPlus ? 'peek-plus' : ''}`}>
+                  {!connected && peekPlus ? (
+                    <span>示例 · 编程 · 2h14m</span>
+                  ) : !connected && peek ? (
+                    '未连接'
+                  ) : inFocus && warning ? (
+                    <span className="tnum">
+                      {label} · {sessionMins}m <span className="warn-peek">· 有点偏航</span>
+                    </span>
+                  ) : peekPlus ? (
+                    <>
+                      {label} · {sessionMins}m
+                      <span className="sub">{appShort}</span>
+                    </>
+                  ) : peek ? (
+                    <span className="tnum">
+                      {label} · {sessionMins}m
+                    </span>
+                  ) : null}
+                </div>
+                <div className="dock-pour" style={{ '--pour-hue': liquidHue }} aria-hidden />
+                {pomoFloat || crystalToast ? <div className="crystal-toast">+1 🍅</div> : null}
+              </div>
 
-        <div
-          className="dock-slot no-drag"
-          style={{ width: dewW, height: dockH }}
-          onMouseEnter={handleEnter}
-          onMouseLeave={handleLeave}
-          onMouseMove={handlePointerMove}
-          onPointerUp={(e) => {
-            if (expanded) return
-            if (e.target.closest('.meniscus-bead-hit')) return
-            if (e.target.closest('.hit')) return
-            openFocus()
-          }}
-        >
-          <MeniscusVessel
-            width={dewW}
-            height={dockH}
-            fillPct={fillPct}
-            hue={liquidHue}
-            horizonHue={horizonHue}
-            glow={liquidGlow}
-            visualState={expanded ? 'focus' : signatureState}
-            categoryKey={cat.key}
-            productiveSeconds={todayTotals.productiveSeconds || 0}
-            sessionSeconds={sessionSeconds}
-            warning={warning}
-            entertainment={entertainmentRipple}
-            flow={flowActive && !expanded}
-            hovered={hovering && signatureState === 'ambient' && !expanded}
-            peek={peek && !peekPlus}
-            peekPlus={peekPlus}
-            wetBias={pointerBias}
-            steady={0.82}
-            gradientId={expanded ? 'meniscus-expanded' : 'meniscus-compact'}
-            onBeadClick={handleCrystal}
-          />
-          <button
-            type="button"
-            className="hit"
-            onPointerDown={handleHitPointerDown}
-            onClick={handleHitClick}
-            aria-label={expanded ? '收起' : '展开'}
-          />
+              {!peek && !flowActive ? (
+                <div
+                  className="meniscus-ambient-chip tnum"
+                  aria-label={`今日有效 ${fmtProd(todayTotals.productiveSeconds || 0)}`}
+                >
+                  <span
+                    className="meniscus-ambient-dot"
+                    style={{
+                      background: liquidHue,
+                      boxShadow: `0 0 8px ${liquidGlow}`,
+                    }}
+                  />
+                  <span className="meniscus-ambient-time">
+                    {fmtProd(todayTotals.productiveSeconds || 0)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : (
           <div
-            className={`peek ${peek && !expanded ? 'show' : ''} ${peekPlus && !expanded ? 'peek-plus' : ''}`}
+            className="dock-slot no-drag"
+            style={{ width: dewW, height: dockH }}
+            onMouseEnter={handleEnter}
+            onMouseLeave={handleLeave}
+            onMouseMove={handlePointerMove}
+            onPointerUp={(e) => {
+              if (e.target.closest('.meniscus-bead-hit')) return
+              if (e.target.closest('.hit')) return
+              openFocus()
+            }}
           >
-            {!connected && peekPlus ? (
-              <span>示例 · 编程 · 2h14m</span>
-            ) : !connected && peek ? (
-              '未连接'
-            ) : inFocus && warning ? (
-              <span className="tnum">
-                {label} · {sessionMins}m <span className="warn-peek">· 有点偏航</span>
-              </span>
-            ) : peekPlus ? (
-              <>
-                {label} · {sessionMins}m
-                <span className="sub">{appShort}</span>
-              </>
-            ) : peek ? (
-              <span className="tnum">
-                {label} · {sessionMins}m
-              </span>
-            ) : null}
+            <MeniscusVessel
+              width={dewW}
+              height={dockH}
+              fillPct={fillPct}
+              hue={liquidHue}
+              horizonHue={horizonHue}
+              glow={liquidGlow}
+              visualState="focus"
+              categoryKey={cat.key}
+              productiveSeconds={todayTotals.productiveSeconds || 0}
+              sessionSeconds={sessionSeconds}
+              warning={warning}
+              entertainment={entertainmentRipple}
+              flow={false}
+              hovered={false}
+              peek={false}
+              peekPlus={false}
+              wetBias={0}
+              steady={0.82}
+              gradientId="meniscus-expanded"
+              onBeadClick={handleCrystal}
+            />
+            <button
+              type="button"
+              className="hit"
+              onPointerDown={handleHitPointerDown}
+              onClick={handleHitClick}
+              aria-label="收起"
+            />
+            <div className="dock-pour" style={{ '--pour-hue': liquidHue }} aria-hidden />
+            {pomoFloat || crystalToast ? <div className="crystal-toast">+1 🍅</div> : null}
           </div>
-          <div className="dock-pour" style={{ '--pour-hue': liquidHue }} aria-hidden />
-          {pomoFloat || crystalToast ? <div className="crystal-toast">+1 🍅</div> : null}
-        </div>
+        )}
 
         {expanded ? (
           <IcebergNeck

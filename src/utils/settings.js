@@ -17,8 +17,10 @@ export const DEFAULT_SETTINGS = {
   pomodoroLongBreakEvery: 4,
   mainline: '',
   mainlineDate: '',
-  /** meniscus (default) | lens-ring | minimal | standard | horizon */
-  presentationMode: 'meniscus',
+  /** thread | meniscus | lens-ring | minimal | standard | horizon */
+  presentationMode: 'thread',
+  /** top | bottom | left | right — thread bundle anchor after drag */
+  threadAnchor: 'top',
 }
 
 function clamp(n, min, max) {
@@ -39,8 +41,10 @@ function normalize(raw) {
   s.pomodoroLongBreakEvery = clamp(Number(s.pomodoroLongBreakEvery) || 4, 2, 8)
   s.mainline = String(s.mainline || '').slice(0, 120)
   s.mainlineDate = String(s.mainlineDate || '')
-  const modes = ['lens-ring', 'meniscus', 'minimal', 'standard', 'horizon']
-  s.presentationMode = modes.includes(s.presentationMode) ? s.presentationMode : 'meniscus'
+  const modes = ['thread', 'meniscus', 'lens-ring', 'minimal', 'standard', 'horizon']
+  s.presentationMode = modes.includes(s.presentationMode) ? s.presentationMode : 'thread'
+  const anchors = ['top', 'bottom', 'left', 'right']
+  s.threadAnchor = anchors.includes(s.threadAnchor) ? s.threadAnchor : 'top'
   // 旧版「极简呼吸点」已并入横露珠 dock
   if (s.presentationMode === 'minimal') s.presentationMode = 'meniscus'
   return s
@@ -49,7 +53,14 @@ function normalize(raw) {
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return normalize(raw ? JSON.parse(raw) : {})
+    const parsed = raw ? JSON.parse(raw) : {}
+    const s = normalize(parsed)
+    if (!localStorage.getItem('timelens-presentation-v3')) {
+      s.presentationMode = 'thread'
+      saveSettings(s)
+      localStorage.setItem('timelens-presentation-v3', '1')
+    }
+    return s
   } catch {
     return normalize({})
   }

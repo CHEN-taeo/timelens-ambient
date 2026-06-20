@@ -55,7 +55,9 @@ export default function SettingsPanel({ onBack }) {
           onChange={(e) => patch({ presentationMode: e.target.value })}
           className="field-input w-full"
         >
-          <option value="meniscus">弯月面 · Meniscus（默认）</option>
+          <option value="thread">丝场 · 几条丝线（默认）</option>
+          <option value="meniscus">弯月面 · Meniscus</option>
+          <option value="lens-ring">透镜环 · Lens Ring</option>
           <option value="standard">标准 · 点 + 分缝文字</option>
           <option value="horizon">地平线 · 顶线强调</option>
           <option value="minimal">极简 · 仅呼吸点</option>

@@ -1,16 +1,24 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, nativeImage, ipcMain, screen } = require('electron')
+const { app, BrowserWindow, Tray, Menu, globalShortcut, nativeImage, ipcMain, screen, clipboard } = require('electron')
 const path = require('path')
 const fs = require('fs')
+
+try {
+  require('dotenv').config({ path: path.join(__dirname, '../.env') })
+} catch {
+  /* dotenv optional */
+}
 
 const isDev = process.env.NODE_ENV === 'development'
 
 let win = null
 let tray = null
 let savedCompactBounds = null
+let mousePassthrough = false
 
-const INITIAL_WIDTH = 140
-const INITIAL_HEIGHT = 30
+const INITIAL_WIDTH = 184
+const INITIAL_HEIGHT = 52
 const TOP_MARGIN = 12
+const PHI = (1 + Math.sqrt(5)) / 2
 
 function compactTopMargin() {
   const workArea = screen.getPrimaryDisplay().workArea
@@ -25,7 +33,7 @@ function centerTopBounds(width, height, dragW = 6, dewW = null) {
   const h = Math.max(28, Math.round(height))
   const strip = Math.max(0, Math.round(dragW))
   const dew = Math.max(48, Math.round(dewW ?? w - strip))
-  const topMargin = Math.max(10, Math.round(workArea.height * 0.016))
+  const topMargin = compactTopMargin()
   const screenCenterX = workArea.x + workArea.width / 2
   const x = Math.round(screenCenterX - strip - dew / 2)
   win.setBounds({
@@ -36,7 +44,6 @@ function centerTopBounds(width, height, dragW = 6, dewW = null) {
   })
 }
 
-/** Resize compact pill — keeps vertical position, centers horizontally. */
 function anchorResize(width, height) {
   if (!win || win.isDestroyed()) return
   const bounds = win.getBounds()
@@ -62,12 +69,44 @@ function setOverlayExpanded() {
   })
 }
 
+function snapThreadBounds(x, y, width, height) {
+  const workArea = screen.getPrimaryDisplay().workArea
+  const margin = Math.max(12, Math.round(workArea.height * 0.012))
+  const anchors = [
+    { x: Math.round(workArea.x + (workArea.width - width) / 2), y: workArea.y + margin },
+    {
+      x: Math.round(workArea.x + (workArea.width - width) / 2),
+      y: workArea.y + workArea.height - height - margin,
+    },
+    { x: workArea.x + 12, y: Math.round(workArea.y + (workArea.height - height) / 2) },
+    {
+      x: workArea.x + workArea.width - width - 12,
+      y: Math.round(workArea.y + (workArea.height - height) / 2),
+    },
+  ]
+  let best = anchors[0]
+  let bestDist = Infinity
+  for (const a of anchors) {
+    const d = (a.x - x) ** 2 + (a.y - y) ** 2
+    if (d < bestDist) {
+      bestDist = d
+      best = a
+    }
+  }
+  return { x: best.x, y: best.y, width, height }
+}
+
+function applyMousePassthrough() {
+  if (!win || win.isDestroyed()) return
+  win.setIgnoreMouseEvents(mousePassthrough, { forward: true })
+}
+
 function createWindow() {
   const workArea = screen.getPrimaryDisplay().workArea
   const topMargin = compactTopMargin()
   const dragW = 6
   const screenCenterX = workArea.x + workArea.width / 2
-  const startX = Math.round(screenCenterX - dragW - (INITIAL_WIDTH - dragW) / 2)
+  const startX = Math.round(screenCenterX - INITIAL_WIDTH / 2)
 
   win = new BrowserWindow({
     width: INITIAL_WIDTH,
@@ -95,6 +134,8 @@ function createWindow() {
 
   win.setAlwaysOnTop(true, 'screen-saver')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  mousePassthrough = false
+  applyMousePassthrough()
 
   if (isDev) {
     let devPort = process.env.VITE_DEV_PORT
@@ -111,6 +152,11 @@ function createWindow() {
   }
 }
 
+ipcMain.handle('display:workArea', () => {
+  const wa = screen.getPrimaryDisplay().workArea
+  return { width: wa.width, height: wa.height, x: wa.x, y: wa.y }
+})
+
 ipcMain.handle('window:getAnchor', () => {
   if (!win || win.isDestroyed()) {
     return { x: 0, y: TOP_MARGIN, screenX: 0, screenY: TOP_MARGIN }
@@ -126,6 +172,7 @@ ipcMain.handle('window:getAnchor', () => {
 })
 
 ipcMain.on('window:setMode', (_evt, { mode, width, height, screenX, screenY, dragW, dewW }) => {
+  if (!win || win.isDestroyed()) return
   if (mode === 'expanded') {
     savedCompactBounds = win.getBounds()
     setOverlayExpanded()
@@ -153,8 +200,32 @@ ipcMain.on('window:centerTop', (_evt, { width, height, dragW, dewW }) => {
     width ?? win?.getBounds().width ?? INITIAL_WIDTH,
     height ?? win?.getBounds().height ?? INITIAL_HEIGHT,
     dragW,
-    dewW
+    dewW,
   )
+})
+
+ipcMain.on('window:move', (_evt, { screenX, screenY, snap = true }) => {
+  if (!win || win.isDestroyed()) return
+  const bounds = win.getBounds()
+  const next = snap
+    ? snapThreadBounds(screenX, screenY, bounds.width, bounds.height)
+    : { x: screenX, y: screenY, width: bounds.width, height: bounds.height }
+  win.setBounds(next)
+})
+
+ipcMain.on('window:setMousePassthrough', (_evt, passthrough) => {
+  mousePassthrough = passthrough === true
+  applyMousePassthrough()
+})
+
+ipcMain.handle('coach:run', async (_evt, body) => {
+  const { runCoachEmbedded } = await import('./coachBridge.mjs')
+  return runCoachEmbedded(body)
+})
+
+ipcMain.handle('clipboard:write', (_evt, text) => {
+  clipboard.writeText(String(text || ''))
+  return true
 })
 
 let soundEnabled = true
@@ -180,12 +251,13 @@ function rebuildTrayMenu() {
       },
     },
     {
-      label: 'Show / Hide',
+      label: 'Show / Hide  (Ctrl+Shift+T)',
       click: () => {
         if (!win) return
         win.isVisible() ? win.hide() : win.show()
       },
     },
+    { label: '撤步 Fix  (Ctrl+Shift+U · 丝场模式)', click: () => triggerFixHotkey() },
     { label: 'Quit  (Ctrl+Shift+Q)', click: () => app.quit() },
   ])
   tray.setContextMenu(menu)
@@ -201,6 +273,12 @@ function createTray() {
   }
 }
 
+function triggerFixHotkey() {
+  if (!win || win.isDestroyed()) return
+  if (!win.isVisible()) win.show()
+  win.webContents.send('thread:triggerFix')
+}
+
 app.whenReady().then(() => {
   createWindow()
   createTray()
@@ -210,6 +288,7 @@ app.whenReady().then(() => {
     if (!win) return
     win.isVisible() ? win.hide() : win.show()
   })
+  globalShortcut.register('CommandOrControl+Shift+U', () => triggerFixHotkey())
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
