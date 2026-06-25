@@ -49,6 +49,7 @@ export function createThreadEngine(layout) {
     mouseY: -9999,
     sweep: 0,
     crossingBoost: 0,
+    bundleStrength: 0.45,
   }
 }
 
@@ -57,6 +58,7 @@ export function stepEngine(engine, dt, targets) {
   engine.tangleAmount = lerp(engine.tangleAmount, targets.tangleAmount ?? 0, t)
   engine.scatterAmount = lerp(engine.scatterAmount, targets.scatterAmount ?? 0, t)
   engine.alignAmount = lerp(engine.alignAmount, targets.alignAmount ?? 0, t)
+  engine.bundleStrength = lerp(engine.bundleStrength, targets.bundleStrength ?? 0.45, t)
   engine.mouseX = targets.mouseX ?? engine.mouseX
   engine.mouseY = targets.mouseY ?? engine.mouseY
   engine.time += dt
@@ -87,7 +89,9 @@ export function sampleThreadPoint(engine, thread, layout, localX) {
     Math.sin((2 * Math.PI * s) / 1 + omega * t + phase) * amp +
     Math.sin((2 * Math.PI * s) / 2 + omega * 1.25 * t + phase * 0.65) * amp * 0.32
 
-  const fanY = spread * smoothstep(s)
+  const beta = engine.bundleStrength ?? 0.45
+  const fanExponent = lerp(1.05, 2.6, beta)
+  const fanY = spread * smoothstep(Math.pow(s, fanExponent))
   const x = anchorX + localX
   let y = anchorY + fanY + wave
 

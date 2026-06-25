@@ -12,7 +12,9 @@ export function deriveThreadTargets({
 }) {
   const cat = currentActivity?.category || 'neutral'
   const meta = CATEGORIES[cat] || CATEGORIES.neutral
-  const sessionSeconds = currentActivity?.sessionSeconds ?? 0
+  const sessionSeconds = currentActivity?.startedAt
+    ? Math.max(0, Math.round((Date.now() - currentActivity.startedAt) / 1000))
+    : (currentActivity?.sessionSeconds ?? 0)
   const inPomodoro = pomodoro?.running && pomodoro?.mode === 'focus'
   const flow = isFlowState({
     sessionSeconds,
@@ -37,11 +39,21 @@ export function deriveThreadTargets({
 
   if (flow) alignAmount = 0.9
 
+  /** Holten-style bundle strength β ∈ [0,1] — 左结右扇的「束紧程度」 */
+  let bundleStrength = 0.45
+  if (cursorForeground) bundleStrength = 0.5
+  if (alignAmount >= 0.5) bundleStrength = 0.75
+  if (scatterAmount >= 0.35) bundleStrength = Math.min(bundleStrength, 0.32)
+  if (scatterAmount >= 0.6) bundleStrength = 0.22
+  if (phase === 'tangle') bundleStrength = 0.88
+  if (phase === 'untangle') bundleStrength = 0.55
+
   if (visibility === 'ghost') {
     return {
       scatterAmount,
       alignAmount,
       tangleAmount,
+      bundleStrength,
       categoryColor: meta.color,
       peekLine: '',
       peekLineLong: '',
@@ -68,6 +80,7 @@ export function deriveThreadTargets({
     scatterAmount,
     alignAmount,
     tangleAmount,
+    bundleStrength,
     categoryColor: meta.color,
     peekLine: label,
     peekLineLong,

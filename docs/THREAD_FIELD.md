@@ -17,7 +17,7 @@
 |-------|------|------|
 | **Drift** | 默认 | 轻微驻波漂游 |
 | **Scatter** | AW 娱乐 / 番茄偏航 | 无理数频比去同步 |
-| **Tangle** | `Ctrl+Shift+U` 或点击丝束 | 短程吸引、结 |
+| **Tangle** | `Ctrl+Shift+U` | 结附近缠结 + Fix 面板 |
 | **Untangle** | 复制 prompt 后 | 水平亮扫 ~300ms |
 | **Align** | 入流 15min+ | 振幅趋同、几乎齐丝 |
 
@@ -30,9 +30,26 @@
 - `L = min(144, workArea.width / φ²)`，φ ≈ 1.618
 - 根数 `n = 5`（宽 < 1400 → 3）
 - 左端 **结（anchor）聚合**，丝向右扇形散开；长短 Fib 参差
-- Ambient 窗：`宽 L+40`，`高` 由 `(n-1)×gap + 波幅` 计算（须能容纳全部丝线）
+- Ambient 窗：`宽 L+40`，`高` 由扇形展开 + 波幅余量计算
 - 设计参考：`docs/THREAD_DESIGN_REFS.md`
-- Focus（fix）：`高 + L/φ`（≈+89px），**宽不变**
+
+## Bundle strength β（束强度）
+
+实现：`deriveThreadTargets()` → `stepEngine()` → `sampleThreadPoint()`  
+Holten 式连续参数：β 越高，丝在结附近收得越紧、梢端才扇开。
+
+| 状态 | β 约 | 视觉 |
+|------|------|------|
+| Drift | 0.45 | 左结右扇，可数 3–5 根 |
+| Cursor 前台 | 0.50 | 略亮、略束 |
+| Align 入流 | 0.75 | 梢端趋同 |
+| Scatter 偏航 | 0.22–0.32 | 扇形加大、频比去同步 |
+| Tangle Fix | 0.88 | 拉回结附近 |
+| Untangle | 0.55 | 亮扫后渐回 Drift |
+
+开发调试：浏览器打开 `?threadDebug=1` 显示当前 β。
+
+- Focus（fix）：`高 + L/φ`（≈+168px），**宽不变**
 - 位置：工作区 **水平居中**，距顶 `max(12, H×0.012)`
 
 ---

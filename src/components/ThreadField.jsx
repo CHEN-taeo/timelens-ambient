@@ -115,6 +115,7 @@ export default function ThreadField() {
         tangleAmount: targets.tangleAmount,
         scatterAmount: targets.scatterAmount,
         alignAmount: targets.alignAmount,
+        bundleStrength: targets.bundleStrength,
         mouseX: engine.mouseX,
         mouseY: engine.mouseY,
         sweepTrigger: consumeSweepTrigger() || sweepTrigger,
@@ -129,6 +130,20 @@ export default function ThreadField() {
         categoryColor: targets.categoryColor,
         clipHeight: layout.bundleH + layout.padY * 2,
       })
+
+      if (
+        import.meta.env.DEV &&
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('threadDebug') === '1'
+      ) {
+        ctx.fillStyle = 'rgba(166, 166, 190, 0.85)'
+        ctx.font = '9px JetBrains Mono, ui-monospace, monospace'
+        ctx.fillText(
+          `β ${engine.bundleStrength.toFixed(2)} · ${phase}`,
+          6,
+          layout.bundleH + layout.padY * 2 - 4,
+        )
+      }
 
       raf = requestAnimationFrame(tick)
     }
