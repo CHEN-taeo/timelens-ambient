@@ -1,5 +1,11 @@
 # TimeLens Ambient
 
+<p align="center">
+  <img src="https://img.shields.io/github/last-commit/CHEN-taeo/timelens-ambient" alt="Last Commit">
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
+</p>
+
+
 A glanceable, always-on **desktop time mirror** — a small bundle of **living silk threads** at the top of your screen. It reads [ActivityWatch](https://activitywatch.net/) to reflect what you're doing (drift / scatter / align), and embeds a **fix coach** when Cursor Agent gets it wrong.
 
 > Default UI: **Thread Field（丝场）**. Meniscus remains available in Settings.
@@ -93,3 +99,10 @@ coach/           embedded prompt coach
 src/thread/      threadLayout, threadPhysics, threadState
 src/components/  ThreadField, ThreadDetail, ThreadFocus (+ Meniscus legacy)
 ```
+
+
+---
+
+## License
+
+MIT
